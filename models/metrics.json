@@ -1,0 +1,14 @@
+{
+    "DIABETES": {
+        "accuracy": 0.7403,
+        "f1_score": 0.6296
+    },
+    "HYPERTENSION": {
+        "accuracy": 0.575,
+        "f1_score": 0.5933
+    },
+    "MATERNAL": {
+        "accuracy": 0.8,
+        "f1_score": 0.0
+    }
+}
