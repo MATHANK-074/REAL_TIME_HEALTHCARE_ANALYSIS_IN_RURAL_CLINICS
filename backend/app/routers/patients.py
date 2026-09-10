@@ -1,94 +1,165 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from pymongo.database import Database
 from typing import List, Optional
+from bson import ObjectId
 
 from ..database import get_db
-from ..models import Patient, User, Village
-from ..schemas import Patient as PatientSchema, PatientCreate
+from ..schemas import Patient as PatientSchema, PatientCreate, User
 from .auth import get_current_user
 from ..services.audit import log_audit
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
-def enforce_patient_area_access(current_user: User, patient: Patient, db: Session):
+def enforce_patient_area_access(current_user: User, patient: dict, db: Database):
     """Enforce that nurse/doctor only access patients in their assigned locations."""
-    if current_user.role == 'ADMIN':
+    if current_user.get("role") == 'ADMIN':
         return
         
-    if current_user.role == 'NURSE':
-        if patient.village_id != current_user.village_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. Patient belongs to another nurse's assigned village."
-            )
+    if current_user.get("role") == 'NURSE':
+        user_area = current_user.get("area_id")
+        user_village = current_user.get("village_id")
+        
+        if user_area:
+            if str(patient.get("area_id")) != str(user_area):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied. Patient is in a different Area."
+                )
+        elif user_village:
+            if str(patient.get("village_id")) != str(user_village):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied. Patient belongs to another nurse's assigned village."
+                )
             
-    elif current_user.role == 'DOCTOR':
-        assigned_villages = db.query(Village).filter(Village.subdistrict_id == current_user.subdistrict_id).all()
-        assigned_village_ids = [v.id for v in assigned_villages]
-        if patient.village_id not in assigned_village_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. Patient belongs to a village outside your jurisdiction."
-            )
+    elif current_user.get("role") == 'DOCTOR':
+        user_clinic = current_user.get("clinic_id")
+        user_sub = current_user.get("subdistrict_id")
+        
+        if user_clinic:
+            if str(patient.get("clinic_id")) != str(user_clinic):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied. Patient does not belong to your assigned Clinic."
+                )
+        elif user_sub:
+            assigned_villages = list(db.villages.find({"subdistrict_id": str(user_sub)}))
+            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+            if str(patient.get("village_id")) not in assigned_village_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied. Patient belongs to a village outside your jurisdiction."
+                )
+
+def serialize_doc(doc):
+    if doc and "_id" in doc:
+        doc["id"] = str(doc["_id"])
+    return doc
 
 @router.get("", response_model=List[PatientSchema])
 def get_patients(
     search: Optional[str] = None, 
-    village_id: Optional[int] = None,
-    db: Session = Depends(get_db), 
+    village_id: Optional[str] = None,
+    db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
     """Retrieve patients accessible to the current user (based on role/assigned location)."""
-    query = db.query(Patient)
+    filter_query = {}
     
     # 1. Enforce Role-Based Area Restrictions
-    if current_user.role == 'NURSE':
-        query = query.filter(Patient.village_id == current_user.village_id)
-    elif current_user.role == 'DOCTOR':
-        assigned_villages = db.query(Village).filter(Village.subdistrict_id == current_user.subdistrict_id).all()
-        assigned_village_ids = [v.id for v in assigned_villages]
-        query = query.filter(Patient.village_id.in_(assigned_village_ids))
-    # ADMIN has no filters
+    if current_user.get("role") == 'NURSE':
+        if current_user.get("area_id"):
+            filter_query["area_id"] = str(current_user.get("area_id"))
+        elif current_user.get("village_id"):
+            filter_query["village_id"] = str(current_user.get("village_id"))
+            
+    elif current_user.get("role") == 'DOCTOR':
+        if current_user.get("clinic_id"):
+            filter_query["clinic_id"] = str(current_user.get("clinic_id"))
+        elif current_user.get("subdistrict_id"):
+            assigned_villages = list(db.villages.find({"subdistrict_id": str(current_user.get("subdistrict_id"))}))
+            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+            filter_query["village_id"] = {"$in": assigned_village_ids}
     
     # 2. Apply optional filters
     if village_id:
-        query = query.filter(Patient.village_id == village_id)
+        filter_query["village_id"] = str(village_id)
         
     if search:
-        search_filter = f"%{search}%"
-        query = query.filter(
-            (Patient.name.like(search_filter)) | 
-            (Patient.patient_code.like(search_filter)) |
-            (Patient.phone.like(search_filter))
-        )
+        filter_query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"patient_code": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}}
+        ]
         
-    return query.order_by(Patient.id.desc()).all()
+    patients = list(db.patients.find(filter_query).sort("_id", -1))
+    return [serialize_doc(p) for p in patients]
 
 @router.get("/{patient_id}", response_model=PatientSchema)
-def get_patient(patient_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_patient(patient_id: str, db: Database = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Retrieve a specific patient's details with location access checking."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
-    return patient
+    
+    # Enrich with Location Names
+    if patient.get("village_id"):
+        v = db.villages.find_one({"_id": ObjectId(patient["village_id"])})
+        if v:
+            patient["village"] = v.get("name")
+            sub = db.subdistricts.find_one({"_id": ObjectId(v.get("subdistrict_id"))})
+            if sub:
+                patient["subdistrict"] = sub.get("name")
+                dist = db.districts.find_one({"_id": ObjectId(sub.get("district_id"))})
+                if dist:
+                    patient["district"] = dist.get("name")
+                    
+    if patient.get("area_id"):
+        a = db.areas.find_one({"_id": ObjectId(patient["area_id"])})
+        if a:
+            patient["area_name"] = a.get("name")
+            
+    if patient.get("clinic_id"):
+        c = db.clinics.find_one({"_id": ObjectId(patient["clinic_id"])})
+        if c:
+            patient["clinic_name"] = c.get("clinic_name")
+            
+    # Enrich with Assigned Nurse / Doctor
+    # Find Nurse for this patient's area/village
+    nurse_query = {"role": "NURSE"}
+    if patient.get("area_id"):
+        nurse_query["area_id"] = patient["area_id"]
+    elif patient.get("village_id"):
+        nurse_query["village_id"] = patient["village_id"]
+    nurses = list(db.users.find(nurse_query))
+    if nurses:
+        patient["assigned_nurse"] = ", ".join([n.get("name") for n in nurses])
+        
+    doctor_query = {"role": "DOCTOR"}
+    if patient.get("clinic_id"):
+        doctor_query["clinic_id"] = patient["clinic_id"]
+    elif v and v.get("subdistrict_id"):
+        doctor_query["subdistrict_id"] = v.get("subdistrict_id")
+    doctors = list(db.users.find(doctor_query))
+    if doctors:
+        patient["assigned_doctor"] = ", ".join([d.get("name") for d in doctors])
+        
+    return serialize_doc(patient)
 
 @router.post("", response_model=PatientSchema, status_code=status.HTTP_201_CREATED)
-def create_patient(patient_data: PatientCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Register a new patient. Auto-generates patient code and enforces location restrictions."""
-    # Check permissions
-    if current_user.role not in ['NURSE', 'ADMIN']:
+    if current_user.get("role") not in ['NURSE', 'ADMIN']:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only Nurses and Admins can register patients"
         )
         
-    # Enforce Nurse registration is limited to their own village
     target_village_id = patient_data.village_id
-    
-    if current_user.role == 'NURSE':
-        target_village_id = current_user.village_id
+    if current_user.get("role") == 'NURSE':
+        target_village_id = current_user.get("village_id")
         
     if not target_village_id:
         raise HTTPException(
@@ -96,68 +167,53 @@ def create_patient(patient_data: PatientCreate, db: Session = Depends(get_db), c
             detail="A village must be specified for the patient"
         )
         
-    # Generate Patient ID (RH-XXXX)
-    last_patient = db.query(Patient).order_by(Patient.id.desc()).first()
-    next_num = (last_patient.id + 1) if last_patient else 1
+    # Generate Patient ID
+    last_patient = db.patients.find_one({}, sort=[("_id", -1)])
+    if last_patient and "patient_code" in last_patient and last_patient["patient_code"].startswith("RH-"):
+        try:
+            next_num = int(last_patient["patient_code"].split("-")[1]) + 1
+        except:
+            next_num = 1
+    else:
+        next_num = 1
     patient_code = f"RH-{next_num:04d}"
 
-    # Verify patient phone doesn't exist
     if patient_data.phone:
-        dup = db.query(Patient).filter(Patient.phone == patient_data.phone).first()
+        dup = db.patients.find_one({"phone": patient_data.phone})
         if dup:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"A patient is already registered with mobile number {patient_data.phone}"
             )
             
-    db_patient = Patient(
-        patient_code=patient_code,
-        name=patient_data.name,
-        age=patient_data.age,
-        gender=patient_data.gender,
-        phone=patient_data.phone,
-        village_id=target_village_id,
-        address=patient_data.address,
-        blood_group=patient_data.blood_group,
-        emergency_contact=patient_data.emergency_contact,
-        existing_disease=patient_data.existing_disease,
-        allergies=patient_data.allergies
-    )
+    db_patient = patient_data.dict()
+    db_patient["patient_code"] = patient_code
+    db_patient["village_id"] = str(target_village_id)
     
-    db.add(db_patient)
-    db.commit()
-    db.refresh(db_patient)
+    result = db.patients.insert_one(db_patient)
+    db_patient["_id"] = result.inserted_id
     
-    # Audit log patient creation
-    log_audit(db, current_user.id, "CREATE_PATIENT", "patients", db_patient.id, f"Registered patient {db_patient.name} ({db_patient.patient_code})")
+    log_audit(db, str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), "CREATE_PATIENT", "patients", str(db_patient["_id"]), f"Registered patient {db_patient['name']} ({patient_code})")
     
-    return db_patient
+    return serialize_doc(db_patient)
 
 @router.put("/{patient_id}", response_model=PatientSchema)
-def update_patient(patient_id: int, patient_data: PatientCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_patient(patient_id: str, patient_data: PatientCreate, db: Database = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Update patient demographics. Enforces location checks."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
     
-    # Update fields
-    patient.name = patient_data.name
-    patient.age = patient_data.age
-    patient.gender = patient_data.gender
-    patient.phone = patient_data.phone
-    patient.address = patient_data.address
-    patient.blood_group = patient_data.blood_group
-    patient.emergency_contact = patient_data.emergency_contact
-    patient.existing_disease = patient_data.existing_disease
-    patient.allergies = patient_data.allergies
-    
-    if current_user.role == 'ADMIN':
-        patient.village_id = patient_data.village_id
+    update_data = patient_data.dict(exclude_unset=True)
+    if current_user.get("role") != 'ADMIN':
+        update_data.pop("village_id", None)
+    if "village_id" in update_data:
+        update_data["village_id"] = str(update_data["village_id"])
         
-    db.commit()
-    db.refresh(patient)
+    db.patients.update_one({"_id": ObjectId(patient_id)}, {"$set": update_data})
+    patient.update(update_data)
     
-    log_audit(db, current_user.id, "UPDATE_PATIENT", "patients", patient.id, f"Updated patient {patient.name} ({patient.patient_code})")
-    return patient
+    log_audit(db, str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), "UPDATE_PATIENT", "patients", patient_id, f"Updated patient {patient.get('name')} ({patient.get('patient_code', '')})")
+    return serialize_doc(patient)

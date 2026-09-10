@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from pymongo.database import Database
 from typing import List
+from bson import ObjectId
 
 from ..database import get_db
-from ..models import Patient, Prediction, User, HealthRecord
-from ..schemas import Prediction as PredictionSchema
+from ..schemas import Prediction as PredictionSchema, User
 from .auth import get_current_user
 from .patients import enforce_patient_area_access
 from ..ml.predictor import predict_risk
@@ -13,28 +13,28 @@ from ..services.audit import log_audit
 
 router = APIRouter(prefix="/predictions", tags=["Predictions"])
 
+def serialize_doc(doc):
+    if doc and "_id" in doc:
+        doc["id"] = str(doc["_id"])
+    return doc
+
 @router.post("/{patient_id}", response_model=PredictionSchema, status_code=status.HTTP_201_CREATED)
 def trigger_prediction(
-    patient_id: int, 
+    patient_id: str, 
     model_name: str, 
-    db: Session = Depends(get_db), 
+    db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Trigger risk assessment prediction for a patient using the specified model.
-    Runs predictions on the patient's latest health record.
-    """
-    # 1. Fetch patient and verify area-based access
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
-    enforce_patient_area_access(current_user, patient)
+    enforce_patient_area_access(current_user, patient, db)
     
-    # 2. Retrieve latest health record logged for the patient
-    latest_record = db.query(HealthRecord).filter(
-        HealthRecord.patient_id == patient_id
-    ).order_by(HealthRecord.recorded_at.desc()).first()
+    latest_record = db.health_records.find_one(
+        {"patient_id": patient_id},
+        sort=[("recorded_at", -1)]
+    )
     
     if not latest_record:
         raise HTTPException(
@@ -42,19 +42,24 @@ def trigger_prediction(
             detail="No health records found for this patient. Please enter health measurements first."
         )
 
-    # 3. Trigger prediction
     try:
         prediction = predict_risk(db, latest_record, patient, model_name)
+        if "_id" not in prediction and "id" not in prediction:
+            result = db.predictions.insert_one(prediction)
+            prediction["_id"] = result.inserted_id
+            prediction_id = str(result.inserted_id)
+        else:
+            prediction_id = str(prediction.get("_id", prediction.get("id")))
         
         log_audit(
             db, 
-            current_user.id, 
+            str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), 
             "TRIGGER_PREDICTION", 
             "predictions", 
-            prediction.id, 
-            f"Triggered {model_name} prediction. Risk={prediction.risk_level} Prob={float(prediction.probability):.2f}"
+            prediction_id, 
+            f"Triggered {model_name} prediction. Risk={prediction.get('risk_level')} Prob={float(prediction.get('probability', 0)):.2f}"
         )
-        return prediction
+        return serialize_doc(prediction)
         
     except ModelNotConfiguredException as e:
         raise HTTPException(
@@ -67,28 +72,24 @@ def trigger_prediction(
             detail=str(e)
         )
 
-
 @router.get("/patient/{patient_id}", response_model=List[PredictionSchema])
 def get_patient_predictions(
-    patient_id: int, 
-    db: Session = Depends(get_db), 
+    patient_id: str, 
+    db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve all past risk prediction outcomes for a patient, with area checks."""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
-    enforce_patient_area_access(current_user, patient)
-    return db.query(Prediction).filter(Prediction.patient_id == patient_id).order_by(Prediction.predicted_at.desc()).all()
-
+    enforce_patient_area_access(current_user, patient, db)
+    predictions = list(db.predictions.find({"patient_id": patient_id}).sort("predicted_at", -1))
+    return [serialize_doc(p) for p in predictions]
 
 @router.get("/metrics", status_code=status.HTTP_200_OK)
 def get_model_evaluation_metrics(
     current_user: User = Depends(get_current_user)
 ):
-    """Get the evaluation metrics of all trained models (accuracy, recall, precision, etc.) for admin use."""
-    # Expose metrics to all registered clinicians and administrators
     metrics = get_model_metrics()
     if not metrics:
         raise HTTPException(
@@ -97,19 +98,17 @@ def get_model_evaluation_metrics(
         )
     return metrics
 
-
 @router.get("/{prediction_id}", response_model=PredictionSchema)
 def get_prediction_detail(
-    prediction_id: int, 
-    db: Session = Depends(get_db), 
+    prediction_id: str, 
+    db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve details of a specific prediction, including its feature importances."""
-    prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    prediction = db.predictions.find_one({"_id": ObjectId(prediction_id)})
     if not prediction:
         raise HTTPException(status_code=404, detail="Prediction record not found")
         
-    # Check permissions
-    patient = prediction.patient
-    enforce_patient_area_access(current_user, patient)
-    return prediction
+    patient = db.patients.find_one({"_id": ObjectId(prediction["patient_id"])})
+    if patient:
+        enforce_patient_area_access(current_user, patient, db)
+    return serialize_doc(prediction)

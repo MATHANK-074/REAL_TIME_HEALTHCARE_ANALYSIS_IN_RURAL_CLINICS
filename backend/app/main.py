@@ -2,16 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .database import engine, Base
-from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard
-
-# Automatically create database tables if they do not exist
-try:
-    Base.metadata.create_all(bind=engine)
-    print("Database tables initialized successfully.")
-except Exception as e:
-    print(f"Database table initialization warning (ensure MySQL is running): {str(e)}")
-
+from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications
 app = FastAPI(
     title="RuralCare AI - Healthcare Risk Prediction API",
     description="Backend API for AI-Powered Rural Healthcare Analytics and Risk Prediction",
@@ -44,6 +35,16 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(followups.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(field_visits.router, prefix="/api")
+
+# Ensure indexes for notifications collection exist
+@app.on_event("startup")
+async def startup_indexes():
+    from .database import get_db
+    async for db in get_db():
+        db.notifications.create_index([("recipient_id", 1), ("is_read", 1), ("created_at", -1)])
+        break
+
 
 @app.get("/api/health")
 def health_check():

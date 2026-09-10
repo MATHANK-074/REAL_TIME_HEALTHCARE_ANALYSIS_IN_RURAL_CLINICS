@@ -1,25 +1,28 @@
 # Project Status: Rural Healthcare AI System
 
+## Architecture Decisions (Phase A)
+- **Database**: Migrating to MongoDB (matches master spec).
+- **Frontend**: Staying on Create-React-App (documented deviation).
+
 ## Current Phase
-- **Phase 1: Project Setup** (In Progress)
+- **Phase A**: Confirm architecture decisions (Completed)
+- **Phase B**: Clinic + Area model additions & MongoDB Migration (Completed)
+- **Phase C**: Field Visit / GPS module (backend + frontend) (Completed)
 
 ## Completed Tasks
-- [x] Initial workspace inspection.
-- [x] Created implementation plan and task checklist.
-- [x] Phase 2: MySQL database schema & seed data
+- [x] Phase A: Architecture decisions confirmed
+- [x] Phase B: Clinic + Area model additions & MongoDB migration (Added Area vs Village separation, Clinic schemas, and assigned DB roles)
+- [x] Phase C: Field Visit / GPS module (backend + frontend)
 
-## Pending Phases
-- [x] Phase 3: Backend core (models, schemas, auth)
-- [x] Phase 4: API routes with Area Access Enforcement
-- [x] Phase 5: ML training scripts (Diabetes, Hypertension, Maternal)
-- [x] Phase 6: Prediction Service & SHAP explainability
-- [x] Phase 7: React Frontend configuration & routing
-- [x] Phase 8: Nurse dashboard and Patient/Health forms
-- [x] Phase 9: Prediction details & explanations view
-- [x] Phase 10: Doctor dashboard, history timeline, and followups
-- [x] Phase 11: Admin analytics and charts
-- [x] Phase 12: Mock alert system / SMS notifications
+## Master Spec Alignment Phases
+- [x] Phase B: Clinic + Area model additions & MongoDB migration
+- [x] Phase C: Field Visit / GPS module (backend + frontend)
+- [ ] Phase D: Area-based authorization audit + tests
+- [ ] Phase E: ML pipeline split, metrics fix (maternal model), SHAP wiring
+- [ ] Phase F: Remaining backend API gaps (clinics, admin assignment, analytics/export, JWT secret fix, notification abstraction)
+- [ ] Phase G: Missing frontend pages/routes + map + trend charts
+- [ ] Phase H: Docs, README, tests, final medical-disclaimer/security pass
 
-## Pending Phases
-- **Phase 13**: Report generation (print styling)
-- **Phase 14**: Testing & Documentation
+## Legacy Pending Phases
+- [ ] Phase 13: Report generation (print styling)
+- [ ] Phase 14: Testing & Documentation

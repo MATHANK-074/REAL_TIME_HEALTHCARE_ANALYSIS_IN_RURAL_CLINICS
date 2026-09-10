@@ -3,7 +3,7 @@ import os
 from sqlalchemy.orm import Session
 from decimal import Decimal
 
-from ..models import Patient, HealthRecord, Prediction, PredictionFactor
+from ..schemas import Patient, HealthRecord, Prediction, PredictionFactor
 from ..config import settings
 from .preprocessing import (
     preprocess_diabetes_input, 
@@ -91,33 +91,32 @@ def predict_risk(
     elif isinstance(pipeline, dict) and 'version' in pipeline:
         model_version = pipeline['version']
 
-    db_prediction = Prediction(
-        patient_id=patient.id,
-        health_record_id=health_record.id,
-        model_name=model_name_upper,
-        disease=disease_display,
-        probability=Decimal(probability),
-        risk_level=risk_level,
-        prediction_result=prediction_result,
-        model_version=model_version
-    )
+    db_prediction_dict = {
+        "patient_id": patient.id,
+        "health_record_id": health_record.id,
+        "model_name": model_name_upper,
+        "disease": disease_display,
+        "probability": str(probability),
+        "risk_level": risk_level,
+        "prediction_result": prediction_result,
+        "model_version": model_version
+    }
     
-    db.add(db_prediction)
-    db.commit()
-    db.refresh(db_prediction)
+    result = db.predictions.insert_one(db_prediction_dict)
+    db_prediction_id = str(result.inserted_id)
 
     # 7. Save prediction factors
+    factors_to_insert = []
     for factor in factors_list:
-        db_factor = PredictionFactor(
-            prediction_id=db_prediction.id,
-            feature_name=factor["feature_name"],
-            feature_value=factor["feature_value"],
-            importance=Decimal(factor["importance"]),
-            direction=factor["direction"]
-        )
-        db.add(db_factor)
-    db.commit()
-    db.refresh(db_prediction)
+        factors_to_insert.append({
+            "prediction_id": db_prediction_id,
+            "feature_name": factor["feature_name"],
+            "feature_value": factor["feature_value"],
+            "importance": str(factor["importance"]),
+            "direction": factor["direction"]
+        })
+    if factors_to_insert:
+        db.prediction_factors.insert_many(factors_to_insert)
 
     # 8. Trigger Alert System if risk level is HIGH
     if risk_level == 'HIGH':

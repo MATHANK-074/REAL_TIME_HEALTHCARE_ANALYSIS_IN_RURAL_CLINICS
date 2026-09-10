@@ -1,7 +1,6 @@
 fastapi
 uvicorn[standard]
-sqlalchemy
-pymysql
+pymongo
 cryptography
 python-dotenv
 bcrypt

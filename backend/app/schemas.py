@@ -1,7 +1,16 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Any
 from datetime import datetime, date
 from decimal import Decimal
+
+# Base model to handle MongoDB ObjectId as string
+class MongoBaseModel(BaseModel):
+    id: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
 
 # Location Schemas
 class DistrictBase(BaseModel):
@@ -10,43 +19,60 @@ class DistrictBase(BaseModel):
 class DistrictCreate(DistrictBase):
     pass
 
-class District(DistrictBase):
-    id: int
+class District(DistrictBase, MongoBaseModel):
     created_at: datetime
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 class SubDistrictBase(BaseModel):
     name: str
-    district_id: int
+    district_id: str
 
 class SubDistrictCreate(SubDistrictBase):
     pass
 
-class SubDistrict(SubDistrictBase):
-    id: int
+class SubDistrict(SubDistrictBase, MongoBaseModel):
     created_at: datetime
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 class VillageBase(BaseModel):
     name: str
-    subdistrict_id: int
+    subdistrict_id: str
 
 class VillageCreate(VillageBase):
     pass
 
-class Village(VillageBase):
-    id: int
+class Village(VillageBase, MongoBaseModel):
     created_at: datetime
 
-    class Config:
-        orm_mode = True
-        from_attributes = True
+
+# Area Schemas (New)
+class AreaBase(BaseModel):
+    name: str
+    village_id: str
+
+class AreaCreate(AreaBase):
+    pass
+
+class Area(AreaBase, MongoBaseModel):
+    created_at: datetime
+
+
+# Clinic Schemas (New)
+class ClinicBase(BaseModel):
+    clinic_code: str
+    clinic_name: str
+    district_id: str
+    subdistrict_id: str
+    village_id: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
+    contact_number: Optional[str] = None
+    is_active: Optional[bool] = True
+
+class ClinicCreate(ClinicBase):
+    pass
+
+class Clinic(ClinicBase, MongoBaseModel):
+    pass
 
 
 # User Schemas
@@ -55,9 +81,11 @@ class UserBase(BaseModel):
     email: EmailStr
     role: str
     phone: Optional[str] = None
-    district_id: Optional[int] = None
-    subdistrict_id: Optional[int] = None
-    village_id: Optional[int] = None
+    district_id: Optional[str] = None
+    subdistrict_id: Optional[str] = None
+    village_id: Optional[str] = None
+    area_id: Optional[str] = None
+    clinic_id: Optional[str] = None
     qualification: Optional[str] = None
 
 class UserCreate(UserBase):
@@ -67,22 +95,18 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    district_id: Optional[int] = None
-    subdistrict_id: Optional[int] = None
-    village_id: Optional[int] = None
+    district_id: Optional[str] = None
+    subdistrict_id: Optional[str] = None
+    village_id: Optional[str] = None
+    area_id: Optional[str] = None
+    clinic_id: Optional[str] = None
     qualification: Optional[str] = None
     is_active: Optional[bool] = None
 
-class User(UserBase):
-    id: int
+class User(UserBase, MongoBaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -106,7 +130,9 @@ class PatientBase(BaseModel):
     age: int
     gender: str
     phone: Optional[str] = None
-    village_id: Optional[int] = None
+    village_id: Optional[str] = None
+    area_id: Optional[str] = None
+    clinic_id: Optional[str] = None
     address: Optional[str] = None
     blood_group: Optional[str] = None
     emergency_contact: Optional[str] = None
@@ -116,21 +142,16 @@ class PatientBase(BaseModel):
 class PatientCreate(PatientBase):
     pass
 
-class Patient(PatientBase):
-    id: int
+class Patient(PatientBase, MongoBaseModel):
     patient_code: str
     created_at: datetime
     updated_at: datetime
     village: Optional[Village] = None
 
-    class Config:
-        orm_mode = True
-        from_attributes = True
-
 
 # Health Record Schemas
 class HealthRecordBase(BaseModel):
-    patient_id: int
+    patient_id: str
     weight: Optional[Decimal] = None
     height: Optional[Decimal] = None
     bmi: Optional[Decimal] = None
@@ -144,18 +165,23 @@ class HealthRecordBase(BaseModel):
     insulin: Optional[int] = None
     pregnancies: Optional[int] = 0
     smoking_status: Optional[str] = 'NEVER'
+    symptoms: Optional[str] = None
+    clinical_notes: Optional[str] = None
+    review_status: Optional[str] = 'PENDING_REVIEW'
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    doctor_notes: Optional[str] = None
+
+class HealthRecordReviewUpdate(BaseModel):
+    review_status: str
+    doctor_notes: Optional[str] = None
 
 class HealthRecordCreate(HealthRecordBase):
     pass
 
-class HealthRecord(HealthRecordBase):
-    id: int
-    recorded_by: int
+class HealthRecord(HealthRecordBase, MongoBaseModel):
+    recorded_by: str
     recorded_at: datetime
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 
 # Prediction Factors
@@ -165,19 +191,14 @@ class PredictionFactorBase(BaseModel):
     importance: Decimal
     direction: int
 
-class PredictionFactor(PredictionFactorBase):
-    id: int
-    prediction_id: int
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
+class PredictionFactor(PredictionFactorBase, MongoBaseModel):
+    prediction_id: str
 
 
 # Prediction Schemas
 class PredictionBase(BaseModel):
-    patient_id: int
-    health_record_id: int
+    patient_id: str
+    health_record_id: str
     model_name: str
     disease: str
     probability: Decimal
@@ -188,42 +209,34 @@ class PredictionBase(BaseModel):
 class PredictionCreate(PredictionBase):
     pass
 
-class Prediction(PredictionBase):
-    id: int
+class Prediction(PredictionBase, MongoBaseModel):
     predicted_at: datetime
     factors: List[PredictionFactor] = []
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 
 # Alert Schemas
 class AlertBase(BaseModel):
-    patient_id: int
-    prediction_id: Optional[int] = None
+    patient_id: str
+    prediction_id: Optional[str] = None
     alert_type: str
     recipient_type: str
     message: str
     channel: Optional[str] = 'DASHBOARD'
     status: Optional[str] = 'UNREAD'
 
-class Alert(AlertBase):
-    id: int
+class Alert(AlertBase, MongoBaseModel):
     created_at: datetime
     sent_at: Optional[datetime] = None
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 
 # Followup Schemas
 class FollowupBase(BaseModel):
-    patient_id: int
+    patient_id: str
     followup_date: date
     notes: Optional[str] = None
     status: Optional[str] = 'PENDING'
+    priority: Optional[str] = 'MEDIUM'
+    reason: Optional[str] = None
 
 class FollowupCreate(FollowupBase):
     pass
@@ -232,33 +245,68 @@ class FollowupUpdate(BaseModel):
     followup_date: Optional[date] = None
     notes: Optional[str] = None
     status: Optional[str] = None
+    priority: Optional[str] = None
+    reason: Optional[str] = None
 
-class Followup(FollowupBase):
-    id: int
-    doctor_id: int
+class Followup(FollowupBase, MongoBaseModel):
+    doctor_id: str
+    nurse_id: Optional[str] = None
+    clinic_id: Optional[str] = None
+    area_id: Optional[str] = None
+    village_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    completed_at: Optional[datetime] = None
     patient: Optional[Patient] = None
-
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
 
 # Audit Log Schemas
 class AuditLogBase(BaseModel):
-    user_id: int
+    user_id: str
     action: str
     entity_type: str
-    entity_id: Optional[int] = None
+    entity_id: Optional[str] = None
     details: Optional[str] = None
 
-class AuditLog(AuditLogBase):
-    id: int
+class AuditLog(AuditLogBase, MongoBaseModel):
     timestamp: datetime
 
-    class Config:
-        orm_mode = True
-        from_attributes = True
 
+# FieldVisit Schemas (New)
+class FieldVisitBase(BaseModel):
+    nurse_id: str
+    patient_id: str
+    clinic_id: Optional[str] = None
+    area_id: Optional[str] = None
+    village_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    accuracy: Optional[float] = None
+    visit_type: Optional[str] = 'REGULAR'
+    notes: Optional[str] = None
+    status: Optional[str] = 'STARTED'
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
+class FieldVisitCreate(FieldVisitBase):
+    pass
+
+class FieldVisit(FieldVisitBase, MongoBaseModel):
+    created_at: datetime
+
+# Notification Schema
+class Notification(BaseModel):
+    id: Optional[str] = None
+    recipient_id: str
+    type: str
+    title: str
+    message: str
+    priority: str = "MEDIUM"
+    is_read: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    patient_id: Optional[str] = None
+    health_record_id: Optional[str] = None
+    followup_id: Optional[str] = None
+    link: Optional[str] = None
+
+    created_at: datetime

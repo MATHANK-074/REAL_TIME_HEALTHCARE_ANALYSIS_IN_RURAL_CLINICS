@@ -1,62 +1,66 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from pymongo.database import Database
 from typing import List, Optional
+from bson import ObjectId
 
 from ..database import get_db
-from ..models import Alert, Patient, User
-from ..schemas import Alert as AlertSchema
+from ..schemas import Alert as AlertSchema, User
 from .auth import get_current_user
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
+def serialize_doc(doc):
+    if doc and "_id" in doc:
+        doc["id"] = str(doc["_id"])
+    return doc
+
 @router.get("", response_model=List[AlertSchema])
 def get_alerts(
-    status: Optional[str] = None, 
-    db: Session = Depends(get_db), 
+    status_param: Optional[str] = None, 
+    db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve alerts based on user role and area permissions."""
-    query = db.query(Alert).join(Patient)
+    filter_query = {}
     
-    # 1. Enforce Area Permissions
-    if current_user.role == 'NURSE':
-        query = query.filter(Patient.area_id == current_user.area_id)
-        # Nurses see alerts relevant to nurses/patients
-        query = query.filter(Alert.recipient_type.in_(['NURSE', 'PATIENT']))
-    elif current_user.role == 'DOCTOR':
-        assigned_area_ids = [a.id for a in current_user.assigned_areas]
-        query = query.filter(Patient.area_id.in_(assigned_area_ids))
-        # Doctors see doctor-directed alerts
-        query = query.filter(Alert.recipient_type == 'DOCTOR')
-    # ADMIN sees everything
+    if current_user.get("role") == 'NURSE':
+        patients_in_area = list(db.patients.find({"village_id": str(current_user.get("village_id"))}, {"_id": 1}))
+        p_ids = [str(p["_id"]) for p in patients_in_area]
+        filter_query["patient_id"] = {"$in": p_ids}
+        filter_query["recipient_type"] = {"$in": ['NURSE', 'PATIENT']}
+    elif current_user.get("role") == 'DOCTOR':
+        assigned_villages = list(db.villages.find({"subdistrict_id": str(current_user.get("subdistrict_id"))}))
+        v_ids = [str(v["_id"]) for v in assigned_villages]
+        patients_in_area = list(db.patients.find({"village_id": {"$in": v_ids}}, {"_id": 1}))
+        p_ids = [str(p["_id"]) for p in patients_in_area]
+        filter_query["patient_id"] = {"$in": p_ids}
+        filter_query["recipient_type"] = 'DOCTOR'
         
-    # 2. Filter by status if specified
-    if status:
-        query = query.filter(Alert.status == status.upper())
+    if status_param:
+        filter_query["status"] = status_param.upper()
         
-    return query.order_by(Alert.id.desc()).all()
+    alerts = list(db.alerts.find(filter_query).sort("_id", -1))
+    return [serialize_doc(a) for a in alerts]
 
 @router.patch("/{alert_id}/read", response_model=AlertSchema)
 def mark_alert_read(
-    alert_id: int, 
-    db: Session = Depends(get_db), 
+    alert_id: str, 
+    db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    """Mark a notification alert as read."""
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    alert = db.alerts.find_one({"_id": ObjectId(alert_id)})
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
         
-    # Check patient area access
-    patient = alert.patient
-    if current_user.role == 'NURSE' and patient.area_id != current_user.area_id:
-        raise HTTPException(status_code=403, detail="Insufficient permission")
-    elif current_user.role == 'DOCTOR':
-        assigned_ids = [a.id for a in current_user.assigned_areas]
-        if patient.area_id not in assigned_ids:
+    patient = db.patients.find_one({"_id": ObjectId(alert["patient_id"])}) if alert.get("patient_id") else None
+    if patient:
+        if current_user.get("role") == 'NURSE' and str(patient.get("village_id")) != str(current_user.get("village_id")):
             raise HTTPException(status_code=403, detail="Insufficient permission")
-            
-    alert.status = 'READ'
-    db.commit()
-    db.refresh(alert)
-    return alert
+        elif current_user.get("role") == 'DOCTOR':
+            assigned_villages = list(db.villages.find({"subdistrict_id": str(current_user.get("subdistrict_id"))}))
+            v_ids = [str(v["_id"]) for v in assigned_villages]
+            if str(patient.get("village_id")) not in v_ids:
+                raise HTTPException(status_code=403, detail="Insufficient permission")
+                
+    db.alerts.update_one({"_id": ObjectId(alert_id)}, {"$set": {"status": "READ"}})
+    alert["status"] = "READ"
+    return serialize_doc(alert)
