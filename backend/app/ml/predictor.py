@@ -1,6 +1,6 @@
 import json
 import os
-from sqlalchemy.orm import Session
+from pymongo.database import Database
 from decimal import Decimal
 
 from ..schemas import Patient, HealthRecord, Prediction, PredictionFactor
@@ -16,11 +16,11 @@ from .explainability import explain_prediction
 from ..services.notification import create_system_alert
 
 def predict_risk(
-    db: Session, 
+    db: Database, 
     health_record: HealthRecord, 
     patient: Patient, 
     model_name: str
-) -> Prediction:
+):
     """
     Run machine learning risk prediction for a patient's health record.
     Saves predictions, maps contributing factors, and triggers high-risk alerts.
@@ -39,7 +39,7 @@ def predict_risk(
             input_df = preprocess_maternal_input(health_record, patient)
             disease_display = "Maternal Health Risk"
         else:
-            raise HTTPException(status_code=400, detail=f"Unsupported model: {model_name}")
+            raise ValueError(f"Unsupported model: {model_name}")
     except MLPreprocessingError as e:
         # Re-raise as ValueError so router can respond with 400 Bad Request
         raise ValueError(str(e))
@@ -120,7 +120,7 @@ def predict_risk(
 
     # 8. Trigger Alert System if risk level is HIGH
     if risk_level == 'HIGH':
-        area_name = patient.area.name if patient.area else "Assigned Area"
+        area_name = getattr(patient, 'area', {}).get('name', 'Assigned Area') if hasattr(patient, 'area') else "Assigned Area"
         # Doctor dashboard alert
         doc_msg = (
             f"High Risk Alert: Patient {patient.name} ({patient.patient_code}) in {area_name} "
@@ -129,7 +129,7 @@ def predict_risk(
         create_system_alert(
             db=db,
             patient_id=patient.id,
-            prediction_id=db_prediction.id,
+            prediction_id=db_prediction_id,
             alert_type='RISK_ALERT',
             recipient_type='DOCTOR',
             message=doc_msg,
@@ -144,11 +144,12 @@ def predict_risk(
         create_system_alert(
             db=db,
             patient_id=patient.id,
-            prediction_id=db_prediction.id,
+            prediction_id=db_prediction_id,
             alert_type='SMS_ALERT',
             recipient_type='PATIENT',
             message=pat_msg,
             channel='SMS'
         )
 
-    return db_prediction
+    db_prediction_dict["_id"] = db_prediction_id
+    return db_prediction_dict
