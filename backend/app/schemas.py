@@ -87,6 +87,7 @@ class UserBase(BaseModel):
     area_id: Optional[str] = None
     clinic_id: Optional[str] = None
     qualification: Optional[str] = None
+    patient_id: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
@@ -271,6 +272,43 @@ class AuditLogBase(BaseModel):
 class AuditLog(AuditLogBase, MongoBaseModel):
     timestamp: datetime
 
+
+# Clinical Support Schemas
+class ClinicalRecommendationBase(BaseModel):
+    patient_id: str
+    health_record_id: str
+    prediction_ids: List[str]
+    condition_results: List[dict]
+    overall_priority: str
+    clinical_attention: List[str]
+    patient_safe_summary: str
+    followup_priority: Optional[str] = None
+    status: str = 'PENDING_REVIEW'
+
+class ClinicalRecommendationCreate(ClinicalRecommendationBase):
+    pass
+
+class ClinicalRecommendation(ClinicalRecommendationBase, MongoBaseModel):
+    generated_at: datetime
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    doctor_notes: Optional[str] = None
+
+class DoctorReviewBase(BaseModel):
+    patient_id: str
+    recommendation_id: str
+    decision: str
+    doctor_notes: Optional[str] = None
+    previous_status: str
+    new_status: str
+
+class DoctorReviewCreate(DoctorReviewBase):
+    pass
+
+class DoctorReview(DoctorReviewBase, MongoBaseModel):
+    doctor_id: str
+    reviewed_at: datetime
+    created_at: datetime
 
 # FieldVisit Schemas (New)
 class FieldVisitBase(BaseModel):

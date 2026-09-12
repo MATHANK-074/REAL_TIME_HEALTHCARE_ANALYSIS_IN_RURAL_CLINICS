@@ -37,6 +37,16 @@ const Sidebar = ({ user, onLogout }) => {
       links.push(
         { path: '/nurse', label: 'Dashboard', icon: Activity }
       );
+    } else if (user.role === 'PATIENT') {
+      links.push(
+        { path: '/patient/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/patient/health', label: 'My Health', icon: Activity },
+        { path: '/patient/history', label: 'Health History', icon: Calendar },
+        { path: '/patient/predictions', label: 'AI Assessment', icon: Activity },
+        { path: '/patient/followups', label: 'Follow-ups', icon: Calendar },
+        { path: '/patient/notifications', label: 'Notifications', icon: Bell },
+        { path: '/patient/profile', label: 'My Profile', icon: Users }
+      );
     }
 
     return links;
@@ -82,7 +92,7 @@ const Sidebar = ({ user, onLogout }) => {
             <div className="profile-info">
               <span className="profile-name">{user.name}</span>
               <span className="profile-role" style={{
-                color: user.role === 'ADMIN' ? '#ef4444' : user.role === 'DOCTOR' ? '#0ea5e9' : '#10b981'
+                color: user.role === 'ADMIN' ? '#ef4444' : user.role === 'DOCTOR' ? '#0ea5e9' : user.role === 'PATIENT' ? '#8b5cf6' : '#10b981'
               }}>{user.role}</span>
             </div>
           </div>

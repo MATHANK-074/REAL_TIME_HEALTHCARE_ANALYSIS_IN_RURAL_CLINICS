@@ -21,7 +21,7 @@ const DoctorDashboard = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [pendingReviews, setPendingReviews] = useState([]);
+  const [reviewQueue, setReviewQueue] = useState([]);
   const [followups, setFollowups] = useState([]);
 
   const loadDashboard = async (silent = false) => {
@@ -29,14 +29,14 @@ const DoctorDashboard = ({ user }) => {
       if (!silent) setLoading(true);
       else setRefreshing(true);
       
-      const [res, prData, fuData] = await Promise.all([
+      const [res, queueData, fuData] = await Promise.all([
         api.getDoctorDashboard(),
-        api.getPendingReviews().catch(() => []),
+        api.clinicalReviews.getQueue().catch(() => []),
         api.getFollowups().catch(() => [])
       ]);
       
       setData(res);
-      setPendingReviews(prData);
+      setReviewQueue(queueData);
       setFollowups(fuData);
     } catch (e) {
       setError('Failed to fetch dashboard metrics: ' + (e.message || e));
@@ -247,41 +247,55 @@ const DoctorDashboard = ({ user }) => {
         <div className="glass" style={{ padding: '24px', flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
             <ClipboardList color="var(--warning)" />
-            <h3 className="chart-title" style={{ margin: 0 }}>Pending Health Reviews</h3>
+            <h3 className="chart-title" style={{ margin: 0 }}>Clinical Review Queue</h3>
           </div>
           
           <div className="table-container">
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>Priority</th>
+                  <th>Patient Name</th>
+                  <th>Highest Risk</th>
                   <th>Date</th>
-                  <th>Patient ID</th>
-                  <th>Symptoms</th>
-                  <th>Review Status</th>
+                  <th>Status</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {pendingReviews.length === 0 ? (
+                {reviewQueue.length === 0 ? (
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
-                      No pending reviews.
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                      No pending clinical reviews.
                     </td>
                   </tr>
                 ) : (
-                  pendingReviews.map((pr) => (
-                    <tr key={pr.id}>
-                      <td>{new Date(pr.recorded_at).toLocaleDateString()}</td>
-                      <td>{pr.patient_id}</td>
-                      <td>{pr.symptoms || '-'}</td>
-                      <td><span className="badge badge-warning">PENDING</span></td>
-                      <td>
-                        <button className="btn btn-secondary btn-sm" onClick={() => handleRowClick(pr.patient_id)}>
-                          Review <ArrowRight size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  reviewQueue.map((rq) => {
+                    let badgeClass = 'badge-primary';
+                    if (rq.overall_priority === 'URGENT') badgeClass = 'badge-danger';
+                    else if (rq.overall_priority === 'HIGH') badgeClass = 'badge-warning';
+                    
+                    const highestRiskCondition = rq.condition_results.find(c => c.risk_level === rq.overall_priority);
+                    const riskLabel = highestRiskCondition ? `${highestRiskCondition.disease} (${rq.overall_priority})` : rq.overall_priority;
+
+                    return (
+                      <tr key={rq.id}>
+                        <td><span className={`badge ${badgeClass}`}>{rq.overall_priority}</span></td>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{rq.patient_name}</div>
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{rq.patient_code}</span>
+                        </td>
+                        <td>{riskLabel}</td>
+                        <td>{new Date(rq.generated_at).toLocaleDateString()}</td>
+                        <td>{rq.status}</td>
+                        <td>
+                          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/doctor/reviews/${rq.patient_id}`)}>
+                            Review <ArrowRight size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

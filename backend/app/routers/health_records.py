@@ -46,6 +46,9 @@ def create_health_record(
             bmi = float(Decimal(w / (h * h)))
             
     db_record = record_data.dict()
+    if db_record.get("weight") is not None: db_record["weight"] = float(db_record["weight"])
+    if db_record.get("height") is not None: db_record["height"] = float(db_record["height"])
+    if db_record.get("temperature") is not None: db_record["temperature"] = float(db_record["temperature"])
     db_record["bmi"] = float(bmi) if bmi else None
     db_record["recorded_by"] = str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys"))
     db_record["recorded_at"] = datetime.datetime.utcnow()
@@ -59,7 +62,11 @@ def create_health_record(
     
     log_audit(db, db_record["recorded_by"], "CREATE_HEALTH_RECORD", "health_records", str(db_record["_id"]), f"Created health record for patient {patient.get('name')} ({patient.get('patient_code')})")
     
-    # After creating health record, notify assigned doctor
+    # Step 1: Run Clinical Support Engine (Triggers predictions + recommendation)
+    from ..services.clinical_support_service import generate_recommendation
+    generate_recommendation(db, db_record, patient)
+    
+    # Step 2: Notify assigned doctor
     from ..services.notification_service import notify_health_review_required
     notify_health_review_required(db, db_record, patient)
     return serialize_doc(db_record)

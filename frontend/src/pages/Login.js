@@ -34,7 +34,8 @@ const Login = ({ onLoginSuccess }) => {
         area_id: loginData.area_id,
         village_id: loginData.village_id,
         subdistrict_id: loginData.subdistrict_id,
-        clinic_id: loginData.clinic_id
+        clinic_id: loginData.clinic_id,
+        patient_id: loginData.patient_id
       }));
       onLoginSuccess(loginData);
       redirectDashboard(loginData.role);
@@ -49,6 +50,7 @@ const Login = ({ onLoginSuccess }) => {
     if (userRole === 'ADMIN') navigate('/admin');
     else if (userRole === 'DOCTOR') navigate('/doctor');
     else if (userRole === 'NURSE') navigate('/nurse');
+    else if (userRole === 'PATIENT') navigate('/patient/dashboard');
     else navigate('/');
   };
 
@@ -57,8 +59,6 @@ const Login = ({ onLoginSuccess }) => {
       {/* Left Side: Product Identity & Illustration */}
       <div className="login-left">
         <div className="login-left-inner">
-          
-
           
           <div className="login-hero">
             <h1 className="login-headline">

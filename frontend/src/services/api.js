@@ -24,7 +24,18 @@ const handleResponse = async (res, defaultErrorMsg) => {
     try {
       err = await res.json();
     } catch(e) {}
-    throw new Error(err.detail || defaultErrorMsg);
+    
+    let errMsg = defaultErrorMsg;
+    if (err.detail) {
+      if (typeof err.detail === 'string') {
+        errMsg = err.detail;
+      } else if (Array.isArray(err.detail) && err.detail[0]?.msg) {
+        errMsg = err.detail[0].msg; // Extract validation message
+      } else {
+        errMsg = JSON.stringify(err.detail);
+      }
+    }
+    throw new Error(errMsg);
   }
   return res.json();
 };
@@ -40,7 +51,17 @@ export const api = {
     // Do not intercept 401 for login specifically so it doesn't redirect loop
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || 'Failed to login');
+      let errMsg = 'Failed to login';
+      if (err.detail) {
+        if (typeof err.detail === 'string') {
+          errMsg = err.detail;
+        } else if (Array.isArray(err.detail) && err.detail[0]?.msg) {
+          errMsg = err.detail[0].msg;
+        } else {
+          errMsg = JSON.stringify(err.detail);
+        }
+      }
+      throw new Error(errMsg);
     }
     return res.json();
   },
@@ -147,6 +168,48 @@ export const api = {
       headers: getHeaders(),
     });
     return handleResponse(res, 'Failed to fetch patient predictions');
+  },
+
+  // Patient Portal APIs
+  clinicalReviews: {
+    getQueue: async () => {
+      const res = await fetch(`${BASE_URL}/reviews/queue`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch clinical review queue');
+    },
+    getReview: async (patientId) => {
+      const res = await fetch(`${BASE_URL}/reviews/${patientId}`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch clinical review details');
+    },
+    submitDecision: async (recommendationId, decision, notes) => {
+      const res = await fetch(`${BASE_URL}/reviews/${recommendationId}/decision`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ decision, doctor_notes: notes })
+      });
+      return handleResponse(res, 'Failed to submit review decision');
+    }
+  },
+  patientPortal: {
+    getDashboard: async () => {
+      const res = await fetch(`${BASE_URL}/patient-portal/dashboard`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch patient dashboard');
+    },
+    getHealth: async () => {
+      const res = await fetch(`${BASE_URL}/patient-portal/health`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch patient health summary');
+    },
+    getHistory: async () => {
+      const res = await fetch(`${BASE_URL}/patient-portal/history`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch patient health history');
+    },
+    getPredictions: async () => {
+      const res = await fetch(`${BASE_URL}/patient-portal/predictions`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch patient AI assessment');
+    },
+    getProfile: async () => {
+      const res = await fetch(`${BASE_URL}/patient-portal/profile`, { headers: getHeaders() });
+      return handleResponse(res, 'Failed to fetch patient profile');
+    },
   },
 
   // Notifications

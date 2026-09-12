@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.database import Database
 from typing import List, Optional
 from bson import ObjectId
+import datetime
 
 from ..database import get_db
 from ..schemas import Patient as PatientSchema, PatientCreate, User
 from .auth import get_current_user
+from ..utils.auth import hash_password
 from ..services.audit import log_audit
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
@@ -192,6 +194,28 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
     
     result = db.patients.insert_one(db_patient)
     db_patient["_id"] = result.inserted_id
+    patient_id_str = str(result.inserted_id)
+    
+    # Auto-create User account for patient portal
+    patient_email = f"{patient_code.lower()}@ruralcare.com"
+    raw_password = patient_data.phone if patient_data.phone else "password123"
+    hashed_pw = hash_password(raw_password)
+    
+    new_user = {
+        "name": patient_data.name,
+        "email": patient_email,
+        "password_hash": hashed_pw,
+        "role": "PATIENT",
+        "phone": patient_data.phone,
+        "village_id": str(target_village_id),
+        "area_id": patient_data.area_id,
+        "clinic_id": patient_data.clinic_id,
+        "patient_id": patient_id_str,
+        "is_active": True,
+        "created_at": datetime.datetime.utcnow(),
+        "updated_at": datetime.datetime.utcnow()
+    }
+    db.users.insert_one(new_user)
     
     log_audit(db, str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), "CREATE_PATIENT", "patients", str(db_patient["_id"]), f"Registered patient {db_patient['name']} ({patient_code})")
     

@@ -148,6 +148,7 @@ def register(user_data: UserCreate, db = Depends(get_db)):
         "area_id": user_data.area_id,
         "clinic_id": user_data.clinic_id,
         "qualification": user_data.qualification,
+        "patient_id": user_data.patient_id,
         "is_active": True,
         "created_at": datetime.datetime.utcnow(),
         "updated_at": datetime.datetime.utcnow()
@@ -163,7 +164,7 @@ def register(user_data: UserCreate, db = Depends(get_db)):
     return new_user_serialized
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login")
 def login(login_data: UserLogin, db = Depends(get_db)):
     """Authenticate credentials and return a JWT access token."""
     user = db.users.find_one({"email": login_data.email})
@@ -189,13 +190,17 @@ def login(login_data: UserLogin, db = Depends(get_db)):
     
     log_audit(db, user["id"], "LOGIN", "users", user["id"], f"Successful login from email={user['email']}")
     
-    return {
+    response_data = {
         "access_token": access_token,
         "token_type": "bearer",
         "role": user["role"],
         "name": user["name"],
         "email": user["email"]
     }
+    if user.get("patient_id"):
+        response_data["patient_id"] = user.get("patient_id")
+        
+    return response_data
 
 
 @router.get("/me", response_model=UserSchema)

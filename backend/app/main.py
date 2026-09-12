@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications
+from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews
 app = FastAPI(
     title="RuralCare AI - Healthcare Risk Prediction API",
     description="Backend API for AI-Powered Rural Healthcare Analytics and Risk Prediction",
@@ -31,6 +31,8 @@ app.include_router(locations.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(field_visits.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(patient_portal.router, prefix="/api")
+app.include_router(clinical_reviews.router, prefix="/api")
 
 # Ensure indexes for notifications collection exist
 @app.on_event("startup")

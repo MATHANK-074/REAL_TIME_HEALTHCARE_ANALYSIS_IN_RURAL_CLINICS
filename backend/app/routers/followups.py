@@ -82,10 +82,18 @@ def get_followups(
             assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
             filter_query["village_id"] = {"$in": assigned_village_ids}
             
+    elif current_user.get("role") == 'PATIENT':
+        # Patient can ONLY see their own followups
+        if not current_user.get("patient_id"):
+            return []
+        filter_query["patient_id"] = str(current_user.get("patient_id"))
+            
     if status_param:
         filter_query["status"] = status_param.upper()
-    if patient_id:
+        
+    if current_user.get("role") != 'PATIENT' and patient_id:
         filter_query["patient_id"] = str(patient_id)
+        
     if priority:
         filter_query["priority"] = priority.upper()
         
