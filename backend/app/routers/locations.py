@@ -7,7 +7,8 @@ from ..database import get_db
 from ..schemas import (
     District as DistrictSchema, DistrictCreate,
     SubDistrict as SubDistrictSchema, SubDistrictCreate,
-    Village as VillageSchema, VillageCreate
+    Village as VillageSchema, VillageCreate,
+    RevenueDivision as DivisionSchema, RevenueDivisionCreate
 )
 from .auth import require_role
 

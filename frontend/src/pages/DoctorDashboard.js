@@ -39,7 +39,7 @@ const DoctorDashboard = ({ user }) => {
       setPendingReviews(prData);
       setFollowups(fuData);
     } catch (e) {
-      setError('Failed to fetch dashboard metrics.');
+      setError('Failed to fetch dashboard metrics: ' + (e.message || e));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -228,7 +228,7 @@ const DoctorDashboard = ({ user }) => {
                   <YAxis stroke="var(--text-secondary)" tickLine={false} />
                   <Tooltip 
                     contentStyle={{ 
-                      background: 'rgba(7, 11, 19, 0.95)', 
+                      background: '#ffffff', 
                       border: '1px solid var(--border-card)', 
                       borderRadius: '8px',
                       color: 'var(--text-primary)'

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications
+from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, geography, geo_hierarchy
 app = FastAPI(
     title="RuralCare AI - Healthcare Risk Prediction API",
     description="Backend API for AI-Powered Rural Healthcare Analytics and Risk Prediction",
@@ -11,15 +11,9 @@ app = FastAPI(
 
 # CORS Configuration
 # Allows React Vite development server (running on port 5173) to communicate with API
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,12 +30,13 @@ app.include_router(followups.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(field_visits.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 
 # Ensure indexes for notifications collection exist
 @app.on_event("startup")
 async def startup_indexes():
     from .database import get_db
-    async for db in get_db():
+    for db in get_db():
         db.notifications.create_index([("recipient_id", 1), ("is_read", 1), ("created_at", -1)])
         break
 

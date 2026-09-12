@@ -1,59 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { Activity, Mail, Lock, User, Phone, CheckCircle, UserCheck } from 'lucide-react';
+import { 
+  Activity, Mail, Lock, Stethoscope, Shield, AlertCircle, Eye, EyeOff, LockKeyhole,
+  MapPin, Hospital, FileText, UserCheck, HeartPulse, CheckCircle2, Brain 
+} from 'lucide-react';
+import './Login.css';
 
 const Login = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
-  const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [clinics, setClinics] = useState([]);
-  const [selectedClinicId, setSelectedClinicId] = useState('');
-  const [areas, setAreas] = useState([]);
+  const [showPassword, setShowPassword] = useState(false);
   
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [role, setRole] = useState('NURSE');
-  const [areaId, setAreaId] = useState('');
-
-  useEffect(() => {
-    if (isRegistering) {
-      const loadMetadata = async () => {
-        try {
-          const clinicsData = await api.getClinicsMetadata();
-          setClinics(clinicsData);
-          if (clinicsData.length > 0) {
-            setSelectedClinicId(clinicsData[0].id);
-            setAreas(clinicsData[0].areas || []);
-            if (clinicsData[0].areas && clinicsData[0].areas.length > 0) {
-              setAreaId(clinicsData[0].areas[0].id);
-            }
-          }
-        } catch (e) {
-          console.error("Failed to load metadata", e);
-        }
-      };
-      loadMetadata();
-    }
-  }, [isRegistering]);
-
-  const handleClinicChange = (e) => {
-    const cid = e.target.value;
-    setSelectedClinicId(cid);
-    const selected = clinics.find(c => c.id === cid);
-    if (selected) {
-      setAreas(selected.areas || []);
-      if (selected.areas && selected.areas.length > 0) {
-        setAreaId(selected.areas[0].id);
-      } else {
-        setAreaId('');
-      }
-    }
-  };
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -61,41 +23,21 @@ const Login = ({ onLoginSuccess }) => {
     setLoading(true);
     
     try {
-      if (isRegistering) {
-        const payloadClinic = selectedClinicId ? selectedClinicId : null;
-        const payloadArea = (role === 'NURSE' && areaId) ? areaId : null;
-        
-        await api.register(
-          name, 
-          email, 
-          password, 
-          role, 
-          phone || null, 
-          payloadClinic, 
-          payloadArea
-        );
-        
-        // Log in automatically after registration
-        const loginData = await api.login(email, password);
-        localStorage.setItem('token', loginData.access_token);
-        localStorage.setItem('user', JSON.stringify({
-          email: loginData.email,
-          name: loginData.name,
-          role: loginData.role
-        }));
-        onLoginSuccess(loginData);
-        redirectDashboard(loginData.role);
-      } else {
-        const loginData = await api.login(email, password);
-        localStorage.setItem('token', loginData.access_token);
-        localStorage.setItem('user', JSON.stringify({
-          email: loginData.email,
-          name: loginData.name,
-          role: loginData.role
-        }));
-        onLoginSuccess(loginData);
-        redirectDashboard(loginData.role);
-      }
+      const loginData = await api.login(email, password);
+      
+      localStorage.setItem('token', loginData.access_token);
+      localStorage.setItem('user', JSON.stringify({
+        id: loginData.id,
+        email: loginData.email,
+        name: loginData.name,
+        role: loginData.role,
+        area_id: loginData.area_id,
+        village_id: loginData.village_id,
+        subdistrict_id: loginData.subdistrict_id,
+        clinic_id: loginData.clinic_id
+      }));
+      onLoginSuccess(loginData);
+      redirectDashboard(loginData.role);
     } catch (err) {
       setError(err.message || 'Authentication failed. Please check credentials.');
     } finally {
@@ -111,168 +53,148 @@ const Login = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-card glass">
-        <div className="auth-header">
-          <Activity size={48} style={{ color: '#0ea5e9', margin: '0 auto 10px' }} />
-          <h2 className="auth-title">RuralCare AI Platform</h2>
-          <p className="auth-subtitle">
-            {isRegistering ? 'Create clinic provider account' : 'Sign in to access patient records'}
-          </p>
+    <div className="login-layout">
+      {/* Left Side: Product Identity & Illustration */}
+      <div className="login-left">
+        <div className="login-left-inner">
+          
+
+          
+          <div className="login-hero">
+            <h1 className="login-headline">
+              Smarter Healthcare.<br/>
+              Stronger Rural Communities.
+            </h1>
+            <p className="login-subheadline">
+              AI-powered healthcare analytics and clinical decision support connecting district health teams, doctors and frontline health workers.
+            </p>
+          </div>
+          
+          <div className="login-visual">
+            <div className="login-visual-image-wrapper">
+              <img
+                src="https://assets.indiaonline.in/cg/tn/About/Health/Tamilnadu-Healthcare.jpg"
+                alt="Doctor and patient in rural health setting"
+                className="login-hero-image"
+                onError={(e) => {
+                  e.target.onerror = null; 
+                  e.target.src = "https://images.unsplash.com/photo-1526406915899-fcd9e4c2c2d8?auto=format&fit=crop&w=800&q=80"; 
+                }}
+              />
+            </div>
+            <div className="login-visual-text">
+              <h3>Transforming Rural Healthcare</h3>
+              <p>Empowering frontline health workers in Erode District with real-time data and AI-driven clinical insights to deliver better care, faster.</p>
+            </div>
+          </div>
+          
+          {/* Feature Strip */}
+          <div className="login-features">
+            <div className="login-feature">
+              <div className="feature-icon feature-icon-blue"><Shield size={18} /></div>
+              <h4>SECURE ACCESS</h4>
+              <p>Role-based permissions protect patient information.</p>
+            </div>
+            <div className="login-feature">
+              <div className="feature-icon feature-icon-green"><Brain size={18} /></div>
+              <h4>PATIENT RISK INSIGHTS</h4>
+              <p>AI-assisted screening for diabetes, cardiovascular and maternal health risks.</p>
+            </div>
+            <div className="login-feature">
+              <div className="feature-icon feature-icon-lightblue"><MapPin size={18} /></div>
+              <h4>FIELD-TO-CLINIC CARE</h4>
+              <p>Connect health workers, clinics and doctors through location-based workflows.</p>
+            </div>
+          </div>
+
+          <div className="login-footer-left">
+            <Shield size={16} className="footer-shield" />
+            Built for secure and accessible rural healthcare.
+          </div>
         </div>
-
-        {error && (
-          <div className="badge badge-danger" style={{ 
-            display: 'block', 
-            padding: '12px', 
-            borderRadius: '10px', 
-            marginBottom: '20px', 
-            textTransform: 'none', 
-            width: '100%', 
-            textAlign: 'center' 
-          }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleAuth}>
-          {isRegistering && (
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <div style={{ position: 'relative' }}>
-                <User size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  style={{ paddingLeft: '44px' }}
-                  placeholder="Dr. Rajesh Kumar" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)}
-                  required 
-                />
+      </div>
+      
+      {/* Right Side: Focused Login Card */}
+      <div className="login-right">
+        <div className="login-form-wrapper">
+          <div className="login-form-container">
+            <div className="login-form-header">
+              <h2 className="login-form-title">Welcome back</h2>
+              <p className="login-form-subtitle">Sign in to your RuralCare AI workspace</p>
+            </div>
+            
+            {error && (
+              <div className="login-error-alert">
+                <AlertCircle size={20} style={{ flexShrink: 0 }} />
+                <span>{error}</span>
               </div>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label">Email Address</label>
-            <div style={{ position: 'relative' }}>
-              <Mail size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
-              <input 
-                type="email" 
-                className="form-control" 
-                style={{ paddingLeft: '44px' }}
-                placeholder="provider@clinic.org" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                required 
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Password</label>
-            <div style={{ position: 'relative' }}>
-              <Lock size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
-              <input 
-                type="password" 
-                className="form-control" 
-                style={{ paddingLeft: '44px' }}
-                placeholder="••••••••" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)}
-                required 
-              />
-            </div>
-          </div>
-
-          {isRegistering && (
-            <>
-              <div className="form-group">
-                <label className="form-label">Phone Number (Optional)</label>
-                <div style={{ position: 'relative' }}>
-                  <Phone size={18} style={{ position: 'absolute', left: '14px', top: '15px', color: 'var(--text-muted)' }} />
+            )}
+            
+            <form onSubmit={handleAuth}>
+              <div className="login-input-group">
+                <label className="login-input-label">Email address</label>
+                <div className="login-input-wrapper">
+                  <Mail size={18} className="login-input-icon" />
                   <input 
-                    type="tel" 
-                    className="form-control" 
-                    style={{ paddingLeft: '44px' }}
-                    placeholder="+91 XXXXX XXXXX" 
-                    value={phone} 
-                    onChange={(e) => setPhone(e.target.value)}
+                    type="email" 
+                    className="login-input" 
+                    placeholder="Enter your registered email" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)}
+                    required 
                   />
                 </div>
               </div>
-
-              <div className="form-group">
-                <label className="form-label">Role</label>
-                <div style={{ display: 'flex', gap: '15px', marginTop: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input 
-                      type="radio" 
-                      name="role" 
-                      value="NURSE" 
-                      checked={role === 'NURSE'} 
-                      onChange={() => setRole('NURSE')} 
-                    />
-                    <span>Nurse</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input 
-                      type="radio" 
-                      name="role" 
-                      value="DOCTOR" 
-                      checked={role === 'DOCTOR'} 
-                      onChange={() => setRole('DOCTOR')} 
-                    />
-                    <span>Doctor</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Clinic</label>
-                <select 
-                  className="form-control" 
-                  value={selectedClinicId} 
-                  onChange={handleClinicChange}
-                >
-                  {clinics.map(c => (
-                    <option key={c.id} value={c.id}>{c.clinic_name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {role === 'NURSE' && areas.length > 0 && (
-                <div className="form-group">
-                  <label className="form-label">Assigned Area</label>
-                  <select 
-                    className="form-control" 
-                    value={areaId} 
-                    onChange={(e) => setAreaId(e.target.value)}
+              
+              <div className="login-input-group">
+                <label className="login-input-label">Password</label>
+                <div className="login-input-wrapper">
+                  <Lock size={18} className="login-input-icon" />
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    className="login-input" 
+                    placeholder="Enter your password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)}
+                    required 
+                  />
+                  <button 
+                    type="button" 
+                    className="login-password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex="-1"
                   >
-                    {areas.map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
-              )}
-            </>
-          )}
+                <div className="forgot-password">
+                  <span title="Please contact your administrator to reset password">
+                    Forgot password?
+                  </span>
+                </div>
+              </div>
+              
+              <button type="submit" className="login-btn" disabled={loading}>
+                {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+              
+              <div className="login-security-info">
+                <LockKeyhole size={14} />
+                <span>Role-based permissions protect patient information.</span>
+              </div>
 
-          <button 
-            type="submit" 
-            className="btn btn-primary" 
-            style={{ width: '100%', padding: '14px', marginTop: '10px' }}
-            disabled={loading}
-          >
-            {loading ? 'Processing...' : isRegistering ? 'Register Account' : 'Login'}
-          </button>
-        </form>
-
-        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.85rem' }}>
-          <span style={{ color: 'var(--text-secondary)' }}>
-            If you need an account, please contact the System Administrator.
-          </span>
+              <div className="login-divider"></div>
+              
+              <div className="login-account-msg">
+                Need access?<br />
+                Contact your system administrator to request an account.
+              </div>
+            </form>
+          </div>
+          
+          <div className="login-footer-right">
+            Erode District Pilot &bull; Tamil Nadu
+          </div>
         </div>
       </div>
     </div>

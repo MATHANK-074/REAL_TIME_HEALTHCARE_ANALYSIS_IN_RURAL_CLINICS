@@ -32,12 +32,7 @@ function App() {
   }, []);
 
   const handleLoginSuccess = (loginData) => {
-    const userObj = {
-      email: loginData.email,
-      name: loginData.name,
-      role: loginData.role
-    };
-    setCurrentUser(userObj);
+    setCurrentUser(loginData);
   };
 
   const handleLogout = () => {
@@ -53,8 +48,8 @@ function App() {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        background: '#070b13',
-        color: '#94a3b8',
+        background: '#f8fafc',
+        color: '#475569',
         fontSize: '1.2rem'
       }}>
         Initializing Care AI Platform...

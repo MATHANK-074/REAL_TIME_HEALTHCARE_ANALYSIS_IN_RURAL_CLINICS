@@ -208,7 +208,7 @@ const AdminLocations = () => {
                     const subVillages = villages.filter(v => v.subdistrict_id === sub.id);
                     
                     return (
-                      <div key={sub.id} className="glass glass-interactive" style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-card)', borderRadius: '12px' }}>
+                      <div key={sub.id} className="glass glass-interactive" style={{ padding: '20px', background: '#f8fafc', border: '1px solid var(--border-card)', borderRadius: '12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
                           <div style={{ background: 'var(--warning-bg)', padding: '8px', borderRadius: '8px' }}>
                             <Building2 size={18} style={{ color: 'var(--warning)' }} />
@@ -216,7 +216,7 @@ const AdminLocations = () => {
                           <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{sub.name}</h3>
                         </div>
                         
-                        <div style={{ paddingLeft: '40px', borderLeft: '2px solid rgba(255,255,255,0.05)', marginLeft: '16px' }}>
+                        <div style={{ paddingLeft: '40px', borderLeft: '2px solid #f1f5f9', marginLeft: '16px' }}>
                           <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
                             Villages ({subVillages.length})
                           </h4>
@@ -230,7 +230,7 @@ const AdminLocations = () => {
                                 const villageClinics = clinics.filter(c => c.village_id === village.id);
                                 
                                 return (
-                                  <li key={village.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                                  <li key={village.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', padding: '10px', background: '#f1f5f9', borderRadius: '8px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
                                       <Home size={16} style={{ color: 'var(--success)' }} />
                                       <span>{village.name}</span>

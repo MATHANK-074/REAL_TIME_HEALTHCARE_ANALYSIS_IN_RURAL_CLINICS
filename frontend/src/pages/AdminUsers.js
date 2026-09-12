@@ -393,7 +393,7 @@ const AdminUsers = () => {
 
               <div className="form-group">
                 <label className="form-label">Role</label>
-                <div style={{ display: 'flex', gap: '20px', marginTop: '10px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px', border: '1px solid var(--border-card)' }}>
+                <div style={{ display: 'flex', gap: '20px', marginTop: '10px', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid var(--border-card)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                     <input type="radio" name="role" value="ADMIN" checked={regForm.role === 'ADMIN'} onChange={(e) => setRegForm({...regForm, role: e.target.value, subdistrict_id: '', village_id: ''})} />
                     <span style={{ fontWeight: regForm.role === 'ADMIN' ? 600 : 400, color: regForm.role === 'ADMIN' ? 'var(--danger)' : '' }}>District Admin</span>

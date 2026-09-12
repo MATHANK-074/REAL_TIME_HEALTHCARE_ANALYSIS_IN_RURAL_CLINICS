@@ -116,6 +116,8 @@ const NurseDashboard = ({ user }) => {
   const [regEmergency, setRegEmergency] = useState('');
   const [regDisease, setRegDisease] = useState('None');
   const [regAllergies, setRegAllergies] = useState('None');
+  const [regVillageId, setRegVillageId] = useState('');
+  const [villages, setVillages] = useState([]);
 
   // Vitals Form State
   const [vWeight, setVWeight] = useState('');
@@ -138,7 +140,19 @@ const NurseDashboard = ({ user }) => {
       const data = await api.getPatients(searchQuery);
       setPatients(data);
     } catch (e) {
-      setError('Failed to fetch patients.');
+      setError('Failed to fetch patients: ' + (e.message || e));
+      console.error('Failed to fetch patients', e);
+    }
+  };
+
+  const loadVillages = async () => {
+    if (user.role === 'ADMIN') {
+      try {
+        const data = await api.getVillages();
+        setVillages(data);
+      } catch (e) {
+        console.error('Failed to fetch villages', e);
+      }
     }
   };
 
@@ -181,7 +195,8 @@ const NurseDashboard = ({ user }) => {
     loadPatients();
     loadFieldVisits();
     loadFollowups();
-  }, [searchQuery]);
+    loadVillages();
+  }, [searchQuery, user.role]);
 
   const handleRegisterPatient = async (e) => {
     e.preventDefault();
@@ -199,7 +214,7 @@ const NurseDashboard = ({ user }) => {
         emergency_contact: regEmergency || null,
         existing_disease: regDisease || null,
         allergies: regAllergies || null,
-        village_id: user.village_id
+        village_id: user.role === 'ADMIN' ? regVillageId : user.village_id
       });
       setSuccess('Patient registered successfully!');
       setShowRegModal(false);
@@ -211,6 +226,7 @@ const NurseDashboard = ({ user }) => {
       setRegPhone('');
       setRegAddress('');
       setRegEmergency('');
+      setRegVillageId('');
     } catch (err) {
       setError(err.message || 'Failed to register patient.');
     }
@@ -553,6 +569,23 @@ const NurseDashboard = ({ user }) => {
                   <input type="text" className="form-control" placeholder="None, Penicillin, Dust..." value={regAllergies} onChange={(e) => setRegAllergies(e.target.value)} />
                 </div>
               </div>
+
+              {user.role === 'ADMIN' && (
+                <div className="form-group">
+                  <label className="form-label">Assign to Village</label>
+                  <select 
+                    className="form-control" 
+                    required 
+                    value={regVillageId} 
+                    onChange={(e) => setRegVillageId(e.target.value)}
+                  >
+                    <option value="">Select Village</option>
+                    {villages.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '15px' }}>
                 Create Patient Profile

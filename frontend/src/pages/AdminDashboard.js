@@ -168,7 +168,7 @@ const AdminDashboard = () => {
         <div className="glass kpi-card">
           <div className="kpi-header">
             <span>Assigned Clinicians</span>
-            <div className="kpi-icon-wrapper" style={{ background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-primary)' }}>
+            <div className="kpi-icon-wrapper" style={{ background: '#f8fafc', color: 'var(--text-primary)' }}>
               <UserCheck size={18} />
             </div>
           </div>
@@ -246,7 +246,7 @@ const AdminDashboard = () => {
                     padding: '14px 18px', 
                     borderRadius: '12px',
                     border: '1px solid var(--border-card)',
-                    background: feed.prediction.risk_level === 'HIGH' ? 'rgba(239, 68, 68, 0.08)' : feed.prediction.risk_level === 'MEDIUM' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(255,255,255,0.01)',
+                    background: feed.prediction.risk_level === 'HIGH' ? 'rgba(239, 68, 68, 0.08)' : feed.prediction.risk_level === 'MEDIUM' ? 'rgba(245, 158, 11, 0.05)' : '#f8fafc',
                     animation: index === 0 ? 'slideDown 0.3s ease-out' : 'none'
                   }}
                 >
@@ -295,7 +295,7 @@ const AdminDashboard = () => {
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.01)', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>MODEL INFERENCE TIME</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>{telemetryStats.server_latency_ms} ms</div>
@@ -303,7 +303,7 @@ const AdminDashboard = () => {
               <Wifi size={20} style={{ color: 'var(--primary)', opacity: 0.8 }} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.01)', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>INGESTION RATE</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--secondary)', marginTop: '2px' }}>{telemetryStats.ingestion_rate_spm} SPM</div>
@@ -311,7 +311,7 @@ const AdminDashboard = () => {
               <TrendingUp size={20} style={{ color: 'var(--secondary)', opacity: 0.8 }} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.01)', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>VILLAGE NODE SYNC</div>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--success)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -322,7 +322,7 @@ const AdminDashboard = () => {
               <ShieldCheck size={20} style={{ color: 'var(--success)', opacity: 0.8 }} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.01)', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>OFFLINE SYNC QUEUE</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>{telemetryStats.offline_queue} pending</div>
@@ -344,7 +344,7 @@ const AdminDashboard = () => {
                 <YAxis stroke="var(--text-secondary)" tickLine={false} />
                 <Tooltip 
                   contentStyle={{ 
-                    background: 'rgba(7, 11, 19, 0.95)', 
+                    background: '#ffffff', 
                     border: '1px solid var(--border-card)', 
                     borderRadius: '8px',
                     color: 'var(--text-primary)'
@@ -366,7 +366,7 @@ const AdminDashboard = () => {
                 <YAxis stroke="var(--text-secondary)" tickLine={false} />
                 <Tooltip 
                   contentStyle={{ 
-                    background: 'rgba(7, 11, 19, 0.95)', 
+                    background: '#ffffff', 
                     border: '1px solid var(--border-card)', 
                     borderRadius: '8px',
                     color: 'var(--text-primary)'
@@ -423,7 +423,7 @@ const AdminDashboard = () => {
               const pct = Math.round((highCount / total) * 100);
               
               return (
-                <div key={disease} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-card)' }}>
+                <div key={disease} style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-card)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                     <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
                       {disease} Predictions

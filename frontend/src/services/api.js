@@ -1,8 +1,9 @@
-const BASE_URL = 'http://localhost:8000/api';
+const BASE_URL = '/api';
 
 const getHeaders = () => {
   const headers = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   };
   const token = localStorage.getItem('token');
   if (token) {
@@ -223,27 +224,26 @@ export const api = {
     return handleResponse(res, 'Failed to create district');
   },
 
-  getSubdistricts: async (districtId = '') => {
-    const url = districtId ? `${BASE_URL}/locations/subdistricts?district_id=${districtId}` : `${BASE_URL}/locations/subdistricts`;
+  // Geography cascade endpoints
+  getTaluks: async (districtId = '') => {
+    const url = districtId ? `${BASE_URL}/locations/taluks?district_id=${districtId}` : `${BASE_URL}/locations/taluks`;
     const res = await fetch(url, { headers: getHeaders() });
-    return handleResponse(res, 'Failed to fetch subdistricts');
-  },
-  
-  createSubdistrict: async (data) => {
-    const res = await fetch(`${BASE_URL}/locations/subdistricts`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(res, 'Failed to create subdistrict');
+    return handleResponse(res, 'Failed to fetch taluks');
   },
 
-  getVillages: async (subdistrictId = '') => {
-    const url = subdistrictId ? `${BASE_URL}/locations/villages?subdistrict_id=${subdistrictId}` : `${BASE_URL}/locations/villages`;
+  getFirkas: async (talukId = '') => {
+    const url = talukId ? `${BASE_URL}/locations/firkas?taluk_id=${talukId}` : `${BASE_URL}/locations/firkas`;
+    const res = await fetch(url, { headers: getHeaders() });
+    return handleResponse(res, 'Failed to fetch firkas');
+  },
+
+  // Updated getVillages to use firkaId
+  getVillages: async (firkaId = '') => {
+    const url = firkaId ? `${BASE_URL}/locations/villages?firka_id=${firkaId}` : `${BASE_URL}/locations/villages`;
     const res = await fetch(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch villages');
   },
-  
+
   createVillage: async (data) => {
     const res = await fetch(`${BASE_URL}/locations/villages`, {
       method: 'POST',
@@ -257,6 +257,28 @@ export const api = {
     const url = villageId ? `${BASE_URL}/locations/areas?village_id=${villageId}` : `${BASE_URL}/locations/areas`;
     const res = await fetch(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch areas');
+  },
+
+  getFacilities: async (areaId = '') => {
+    const url = areaId ? `${BASE_URL}/locations/facilities?area_id=${areaId}` : `${BASE_URL}/locations/facilities`;
+    const res = await fetch(url, { headers: getHeaders() });
+    return handleResponse(res, 'Failed to fetch facilities');
+  },
+
+  // Deprecated subdistrict endpoints (retain for compatibility)
+  getSubdistricts: async (districtId = '') => {
+    const url = districtId ? `${BASE_URL}/locations/subdistricts?district_id=${districtId}` : `${BASE_URL}/locations/subdistricts`;
+    const res = await fetch(url, { headers: getHeaders() });
+    return handleResponse(res, 'Failed to fetch subdistricts');
+  },
+
+  createSubdistrict: async (data) => {
+    const res = await fetch(`${BASE_URL}/locations/subdistricts`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res, 'Failed to create subdistrict');
   },
   
   createArea: async (data) => {
