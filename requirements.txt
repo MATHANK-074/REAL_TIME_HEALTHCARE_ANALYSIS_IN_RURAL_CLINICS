@@ -9,3 +9,4 @@ pandas
 numpy
 scikit-learn
 joblib
+email-validator
