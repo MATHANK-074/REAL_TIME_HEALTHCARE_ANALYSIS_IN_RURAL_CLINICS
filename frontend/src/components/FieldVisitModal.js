@@ -1,17 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import { MapPin, Navigation, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
 
-// Fix for default marker icons in react-leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
-  iconUrl: require('leaflet/dist/images/marker-icon.png'),
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
-});
+const GOOGLE_MAPS_API_KEY = "AIzaSyCqlExf1BkdOn5QMmnraDl-DurE6jFeL1k";
 
 const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
   const [location, setLocation] = useState(null);
@@ -22,8 +14,11 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState('');
 
-  // Fallback area coords (ideally fetched from Village/Area DB)
-  // For demo, we just center on the nurse's captured location if available
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY
+  });
+
   const [assignedCoords, setAssignedCoords] = useState(null);
 
   const requestGPS = () => {
@@ -177,18 +172,20 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
           <div>
             <h4 style={{ marginBottom: '10px' }}>Map Reference</h4>
             <div style={{ height: '250px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#e5e7eb' }}>
-              {status === 'captured' && location ? (
-                <MapContainer center={[location.lat, location.lng]} zoom={15} style={{ height: '100%', width: '100%' }}>
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+              {status === 'captured' && location && isLoaded ? (
+                <GoogleMap
+                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                  center={{ lat: location.lat, lng: location.lng }}
+                  zoom={15}
+                  options={{ disableDefaultUI: true, zoomControl: true }}
+                >
+                  <Marker position={{ lat: location.lat, lng: location.lng }} />
+                  <Circle 
+                    center={{ lat: location.lat, lng: location.lng }} 
+                    radius={300} 
+                    options={{ strokeColor: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.15, strokeOpacity: 0.5, strokeWeight: 2 }} 
                   />
-                  <Marker position={[location.lat, location.lng]}>
-                    <Popup>Your current location</Popup>
-                  </Marker>
-                  {/* Highlight approximate area */}
-                  <Circle center={[location.lat, location.lng]} radius={300} pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }} />
-                </MapContainer>
+                </GoogleMap>
               ) : (
                 <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', padding: '20px', textAlign: 'center' }}>
                   {status === 'pending' ? 'Loading map...' : 'Map unavailable without GPS coordinates.'}
