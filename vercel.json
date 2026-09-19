@@ -2,12 +2,16 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://ruralcare-backend-8lcv.onrender.com/api/:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],
   "env": {
     "CI": "false",
-    "REACT_APP_API_URL": "/api"
+    "REACT_APP_API_URL": "https://ruralcare-backend-8lcv.onrender.com/api"
   }
 }
