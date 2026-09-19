@@ -132,3 +132,33 @@ def notify_escalated(db, record, patient, admin_user_id: str):
                                                 priority="URGENT", patient_id=str(patient.get('_id')),
                                                 health_record_id=str(record.get('_id')), link=link))
     return notifications
+
+def notify_patient_followup_updated(db, followup, patient):
+    """
+    Sends a safe status update notification to the patient when their follow-up status changes.
+    Does not expose sensitive clinical data.
+    """
+    patient_user = db.users.find_one({"role": "PATIENT", "patient_id": str(patient.get("_id"))})
+    if not patient_user:
+        return None
+        
+    status = followup.get("status", "").upper()
+    title = "Follow-up Status Updated"
+    
+    if status == "SCHEDULED" or status == "PENDING":
+        message = f"Your follow-up has been scheduled for {followup.get('followup_date')}. Please check your dashboard for details."
+    elif status == "COMPLETED":
+        message = f"Your follow-up scheduled on {followup.get('followup_date')} has been completed."
+    else:
+        message = "Your healthcare follow-up status has been updated."
+
+    link = "/patient"
+    notif = create_notification(db, str(patient_user["_id"]), "FOLLOWUP_UPDATED", title, message,
+                                priority="LOW", patient_id=str(patient.get('_id')),
+                                followup_id=str(followup.get('_id')), link=link)
+                                
+    # Also attempt to send web push
+    from .push_notification_service import send_web_push
+    send_web_push(db, str(patient_user["_id"]), title, message, link)
+    
+    return notif

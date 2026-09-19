@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, ShieldAlert, Check } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -6,7 +6,7 @@ const Header = ({ title, user }) => {
   const [notifications, setNotifications] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       if (!user) return;
       const data = await api.getNotifications();
@@ -15,13 +15,13 @@ const Header = ({ title, user }) => {
     } catch (e) {
       console.log('Error fetching notifications', e);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 15000); // Poll notifications every 15s
     return () => clearInterval(interval);
-  }, [user]);
+  }, [fetchNotifications]);
 
   const handleMarkAsRead = async (id, e) => {
     e.stopPropagation();

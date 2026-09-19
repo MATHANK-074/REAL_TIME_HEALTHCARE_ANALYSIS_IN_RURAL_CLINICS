@@ -38,6 +38,15 @@ dist-ssr/
 .env.test.local
 .env.production.local
 
+# Log files
+*.log
+backend_log.txt
+frontend_log.txt
+
+# Temp scripts
+backend/check_pw.py
+backend/update_pw.py
+
 # IDEs
 .vscode/
 .idea/

@@ -8,8 +8,12 @@ from ..config import settings
 from .preprocessing import (
     preprocess_diabetes_input, 
     preprocess_hypertension_input, 
-    preprocess_maternal_input, 
-    MLPreprocessingError
+    preprocess_maternal_input,
+    preprocess_heart_disease_input,
+    preprocess_stroke_input,
+    preprocess_kidney_input,
+    MLPreprocessingError,
+    MLDataUnavailableError
 )
 from .model_registry import load_ml_model, ModelNotConfiguredException
 from .explainability import explain_prediction
@@ -38,8 +42,23 @@ def predict_risk(
         elif model_name_upper == 'MATERNAL':
             input_df = preprocess_maternal_input(health_record, patient)
             disease_display = "Maternal Health Risk"
+        elif model_name_upper == 'HEART_DISEASE':
+            input_df = preprocess_heart_disease_input(health_record, patient)
+            disease_display = "Heart Disease Risk"
+        elif model_name_upper == 'STROKE':
+            input_df = preprocess_stroke_input(health_record, patient)
+            disease_display = "Stroke Risk"
+        elif model_name_upper == 'KIDNEY':
+            input_df = preprocess_kidney_input(health_record, patient)
+            disease_display = "Kidney Disease Risk"
         else:
             raise ValueError(f"Unsupported model: {model_name}")
+    except MLDataUnavailableError as e:
+        # Required clinical/laboratory data is missing from current schema.
+        # Store an UNAVAILABLE prediction record — do NOT fabricate values.
+        return _create_unavailable_prediction(
+            db, health_record, patient, model_name_upper, str(e)
+        )
     except MLPreprocessingError as e:
         # Re-raise as ValueError so router can respond with 400 Bad Request
         raise ValueError(str(e))
@@ -152,4 +171,46 @@ def predict_risk(
         )
 
     db_prediction_dict["_id"] = db_prediction_id
+    return db_prediction_dict
+
+
+def _create_unavailable_prediction(db, health_record, patient, model_name, reason):
+    """
+    Create and persist an UNAVAILABLE prediction when required clinical/
+    laboratory data is not present in the current schema.
+
+    No probability is fabricated, no alerts are triggered, and the record
+    is stored purely for audit visibility.
+    """
+    _DISEASE_DISPLAY = {
+        'HEART_DISEASE': 'Heart Disease Risk',
+        'STROKE': 'Stroke Risk',
+        'KIDNEY': 'Kidney Disease Risk',
+    }
+    disease_display = _DISEASE_DISPLAY.get(model_name, f"{model_name.replace('_', ' ').title()} Risk")
+
+    # Safely extract IDs regardless of whether we received a Pydantic model or dict
+    if hasattr(patient, 'id'):
+        patient_id = patient.id
+    else:
+        patient_id = str(patient.get("_id", patient.get("id", "")))
+
+    if hasattr(health_record, 'id'):
+        hr_id = health_record.id
+    else:
+        hr_id = str(health_record.get("_id", health_record.get("id", "")))
+
+    db_prediction_dict = {
+        "patient_id": patient_id,
+        "health_record_id": hr_id,
+        "model_name": model_name,
+        "disease": disease_display,
+        "probability": "0.0",
+        "risk_level": "UNAVAILABLE",
+        "prediction_result": f"Assessment unavailable — {reason}",
+        "model_version": "1.0.0",
+    }
+
+    result = db.predictions.insert_one(db_prediction_dict)
+    db_prediction_dict["_id"] = str(result.inserted_id)
     return db_prediction_dict

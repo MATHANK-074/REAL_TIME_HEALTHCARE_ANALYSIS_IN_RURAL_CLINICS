@@ -191,23 +191,23 @@ export const api = {
   },
   patientPortal: {
     getDashboard: async () => {
-      const res = await fetch(`${BASE_URL}/patient-portal/dashboard`, { headers: getHeaders() });
+      const res = await fetch(`${BASE_URL}/patient/dashboard`, { headers: getHeaders() });
       return handleResponse(res, 'Failed to fetch patient dashboard');
     },
     getHealth: async () => {
-      const res = await fetch(`${BASE_URL}/patient-portal/health`, { headers: getHeaders() });
+      const res = await fetch(`${BASE_URL}/patient/health`, { headers: getHeaders() });
       return handleResponse(res, 'Failed to fetch patient health summary');
     },
     getHistory: async () => {
-      const res = await fetch(`${BASE_URL}/patient-portal/history`, { headers: getHeaders() });
+      const res = await fetch(`${BASE_URL}/patient/history`, { headers: getHeaders() });
       return handleResponse(res, 'Failed to fetch patient health history');
     },
     getPredictions: async () => {
-      const res = await fetch(`${BASE_URL}/patient-portal/predictions`, { headers: getHeaders() });
+      const res = await fetch(`${BASE_URL}/patient/predictions`, { headers: getHeaders() });
       return handleResponse(res, 'Failed to fetch patient AI assessment');
     },
     getProfile: async () => {
-      const res = await fetch(`${BASE_URL}/patient-portal/profile`, { headers: getHeaders() });
+      const res = await fetch(`${BASE_URL}/patient/profile`, { headers: getHeaders() });
       return handleResponse(res, 'Failed to fetch patient profile');
     },
   },
@@ -260,9 +260,10 @@ export const api = {
   },
 
   updateFollowupStatus: async (followupId, status) => {
-    const res = await fetch(`${BASE_URL}/followups/${followupId}?status=${status}`, {
+    const res = await fetch(`${BASE_URL}/followups/${followupId}`, {
       method: 'PUT',
       headers: getHeaders(),
+      body: JSON.stringify({ status }),
     });
     return handleResponse(res, 'Failed to update follow-up status');
   },
@@ -392,11 +393,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(data)
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to start field visit');
-    }
-    return res.json();
+    return handleResponse(res, 'Failed to start field visit');
   },
 
   updateFieldVisit: async (visitId, data) => {
@@ -405,11 +402,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(data)
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Failed to update field visit');
-    }
-    return res.json();
+    return handleResponse(res, 'Failed to update field visit');
   },
 
   getFieldVisits: async (statusFilter = '', patientId = '') => {
@@ -417,7 +410,32 @@ export const api = {
     if (statusFilter) url += `status_filter=${statusFilter}&`;
     if (patientId) url += `patient_id=${patientId}`;
     const res = await fetch(url, { headers: getHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch field visits');
-    return res.json();
+    return handleResponse(res, 'Failed to fetch field visits');
+  },
+
+  // Push Notifications
+  getVapidPublicKey: async () => {
+    const res = await fetch(`${BASE_URL}/push/public-key`, { headers: getHeaders() });
+    return handleResponse(res, 'Failed to get VAPID public key');
+  },
+  
+  subscribeToPush: async (subscription) => {
+    const res = await fetch(`${BASE_URL}/push/subscribe`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(subscription),
+    });
+    return handleResponse(res, 'Failed to subscribe to push notifications');
+  },
+  
+  unsubscribeFromPush: async (subscription) => {
+    const res = await fetch(`${BASE_URL}/push/unsubscribe`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+      body: JSON.stringify(subscription),
+    });
+    return handleResponse(res, 'Failed to unsubscribe from push notifications');
   }
 };
+
+export default api;

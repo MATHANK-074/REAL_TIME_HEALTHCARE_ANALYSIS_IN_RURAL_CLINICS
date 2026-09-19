@@ -3,19 +3,44 @@ import joblib
 import json
 from typing import Dict, Any, Optional
 
+# ---------------------------------------------------------------------------
+# Sklearn 1.7+ compatibility shim
+# Models saved with sklearn 1.6.x use ColumnTransformer internals that
+# reference _RemainderColsList, which was removed in sklearn 1.7.
+# Injecting a lightweight shim lets joblib.load() succeed without modifying
+# the original .pkl artifacts.
+# ---------------------------------------------------------------------------
+import sklearn.compose._column_transformer as _ct_module
+if not hasattr(_ct_module, '_RemainderColsList'):
+    class _RemainderColsList(list):
+        """Compatibility shim for sklearn < 1.7 ColumnTransformer models."""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args)
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+        def __reduce__(self):
+            return (self.__class__, (list(self),))
+    _ct_module._RemainderColsList = _RemainderColsList
+# ---------------------------------------------------------------------------
+
 class ModelNotConfiguredException(Exception):
     pass
 
 # Simple memory cache for loaded models
 _MODEL_CACHE: Dict[str, Any] = {}
 
+# Filename overrides for models that do not follow the {name}_model.pkl pattern
+_MODEL_FILENAME_MAP: Dict[str, str] = {
+    "HEART_DISEASE": "heart_disease_risk_model.pkl",
+}
+
 def get_model_path(model_name: str) -> str:
     """Get the absolute filepath for a saved model file in models/ directory."""
-    # Resolve against the root workspace directory
-    # Workspace root is typically the current working directory or we can construct it
-    cwd = os.getcwd()
-    filename = f"{model_name.lower()}_model.pkl"
-    return os.path.join(cwd, "models", filename)
+    # Resolve: backend/app/ml/model_registry.py -> ml/ -> app/ -> backend/ -> project-root/
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    model_key = model_name.upper()
+    filename = _MODEL_FILENAME_MAP.get(model_key, f"{model_name.lower()}_model.pkl")
+    return os.path.join(project_root, "models", filename)
 
 def load_ml_model(model_name: str) -> Any:
     """

@@ -7,7 +7,6 @@ import {
   Clock, 
   ShieldAlert, 
   TrendingUp, 
-  AlertTriangle,
   Play,
   Pause,
   RefreshCw,
@@ -111,7 +110,7 @@ const AdminDashboard = () => {
     );
   }
 
-  const { kpis, risk_distribution, disease_distribution, high_risk_by_disease, subdistrict_comparison, village_wise_risk, monthly_trend } = data;
+  const { kpis, disease_distribution, high_risk_by_disease, subdistrict_comparison, village_wise_risk, monthly_trend } = data;
 
   return (
     <div className="main-content">

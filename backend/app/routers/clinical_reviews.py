@@ -32,26 +32,44 @@ def get_clinical_review_queue(
         if not current_user.get("clinic_id") and not current_user.get("subdistrict_id"):
             return [] # No assignment, no queue
             
-    # 2. Build Patient Filter
+    # 2. Build Patient Filter with clinic + subdistrict village fallback
     p_ids = []
-    if current_user.get("clinic_id"):
-        patients = list(db.patients.find({"clinic_id": str(current_user.get("clinic_id"))}, {"_id": 1}))
-        p_ids = [str(p["_id"]) for p in patients]
-    elif current_user.get("subdistrict_id"):
-        assigned_villages = list(db.villages.find({"subdistrict_id": str(current_user.get("subdistrict_id"))}))
-        assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
-        patients = list(db.patients.find({"village_id": {"$in": assigned_village_ids}}, {"_id": 1}))
-        p_ids = [str(p["_id"]) for p in patients]
+    if current_user.get("role") == 'DOCTOR':
+        clinic_id = current_user.get("clinic_id")
+        subdistrict_id = current_user.get("subdistrict_id")
         
-    if current_user.get("role") == 'DOCTOR' and not p_ids:
-        return []
+        if clinic_id and not subdistrict_id:
+            try:
+                c = db.clinics.find_one({"_id": ObjectId(clinic_id)})
+                if c and c.get("subdistrict_id"):
+                    subdistrict_id = str(c["subdistrict_id"])
+            except Exception:
+                pass
 
+        query_conditions = []
+        if clinic_id:
+            query_conditions.append({"clinic_id": str(clinic_id)})
+        if subdistrict_id:
+            assigned_villages = list(db.villages.find({"subdistrict_id": str(subdistrict_id)}))
+            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+            if assigned_village_ids:
+                query_conditions.append({"village_id": {"$in": assigned_village_ids}})
+
+        if query_conditions:
+            patients = list(db.patients.find({"$or": query_conditions}, {"_id": 1}))
+            p_ids = [str(p["_id"]) for p in patients]
+        else:
+            patients = list(db.patients.find({}, {"_id": 1}))
+            p_ids = [str(p["_id"]) for p in patients]
+        
     # 3. Fetch Recommendations
     filter_query = {}
     if current_user.get("role") == 'DOCTOR':
         filter_query["patient_id"] = {"$in": p_ids}
         
     recs = list(db.clinical_recommendations.find(filter_query).sort("generated_at", -1))
+    
+    print(f"[DOCTOR_ASSESSMENT_QUERY] doctor_id={current_user.get('id')} clinic_id={current_user.get('clinic_id')} patient_ids_found={len(p_ids)} recs_found={len(recs)}")
     
     # 4. Enrich and Sort Queue
     queue = []
@@ -103,9 +121,19 @@ def get_patient_clinical_review(
     if not rec:
         raise HTTPException(status_code=404, detail="No clinical recommendations found for this patient.")
         
-    # Get latest health record
-    record = db.health_records.find_one({"_id": ObjectId(rec["health_record_id"])})
-    
+    # Get health record safely (support both ObjectId and string ID)
+    record = None
+    if rec.get("health_record_id"):
+        try:
+            record = db.health_records.find_one({"_id": ObjectId(rec["health_record_id"])})
+        except Exception:
+            pass
+        if not record:
+            record = db.health_records.find_one({"_id": rec["health_record_id"]})
+
+    if not record:
+        record = db.health_records.find_one({"patient_id": patient_id}, sort=[("recorded_at", -1)])
+        
     return {
         "patient": serialize_doc(patient),
         "health_record": serialize_doc(record),

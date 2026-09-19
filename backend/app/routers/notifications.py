@@ -6,6 +6,7 @@ from datetime import datetime
 from ..schemas import Notification, User
 from ..services.notification_service import create_notification
 from .auth import get_current_user
+from ..database import get_db
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -21,7 +22,7 @@ def get_notif_filter(current_user: User):
 
 @router.get("/", response_model=List[Notification])
 def list_notifications(skip: int = 0, limit: int = 20,
-                     db: Database = Depends(lambda: __import__('..database', fromlist=['get_db']).get_db()),
+                     db: Database = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
     filter_query = get_notif_filter(current_user)
     if not filter_query.get("patient_id") and not filter_query.get("recipient_id"):
@@ -31,7 +32,7 @@ def list_notifications(skip: int = 0, limit: int = 20,
 
 @router.get("/unread", response_model=List[Notification])
 def list_unread(skip: int = 0, limit: int = 20,
-               db: Database = Depends(lambda: __import__('..database', fromlist=['get_db']).get_db()),
+               db: Database = Depends(get_db),
                current_user: User = Depends(get_current_user)):
     filter_query = get_notif_filter(current_user)
     filter_query["is_read"] = False
@@ -39,7 +40,7 @@ def list_unread(skip: int = 0, limit: int = 20,
     return [serialize(n) for n in cursor]
 
 @router.get("/unread-count")
-def unread_count(db: Database = Depends(lambda: __import__('..database', fromlist=['get_db']).get_db()),
+def unread_count(db: Database = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
     filter_query = get_notif_filter(current_user)
     filter_query["is_read"] = False
@@ -48,7 +49,7 @@ def unread_count(db: Database = Depends(lambda: __import__('..database', fromlis
 
 @router.patch("/{notif_id}/read")
 def mark_read(notif_id: str,
-              db: Database = Depends(lambda: __import__('..database', fromlist=['get_db']).get_db()),
+              db: Database = Depends(get_db),
               current_user: User = Depends(get_current_user)):
     filter_query = get_notif_filter(current_user)
     filter_query["_id"] = __import__('bson').ObjectId(notif_id)
@@ -58,7 +59,7 @@ def mark_read(notif_id: str,
     return {"status": "marked read"}
 
 @router.patch("/read-all")
-def mark_all_read(db: Database = Depends(lambda: __import__('..database', fromlist=['get_db']).get_db()),
+def mark_all_read(db: Database = Depends(get_db),
                  current_user: User = Depends(get_current_user)):
     filter_query = get_notif_filter(current_user)
     filter_query["is_read"] = False

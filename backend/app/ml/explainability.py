@@ -24,7 +24,39 @@ HEALTHY_BASELINES = {
     "SystolicBP": 120.0,
     "DiastolicBP": 80.0,
     "BodyTemp": 98.6,
-    "HeartRate": 72.0
+    "HeartRate": 72.0,
+    # Heart Disease (Cleveland)
+    "sex": 0.0,
+    "cp": 0.0,
+    "trestbps": 120.0,
+    "chol": 200.0,
+    "fbs": 0.0,
+    "restecg": 0.0,
+    "thalach": 150.0,
+    "exang": 0.0,
+    "oldpeak": 0.0,
+    "slope": 1.0,
+    "ca": 0.0,
+    "thal": 2.0,
+    # Stroke
+    "hypertension": 0.0,
+    "heart_disease": 0.0,
+    "avg_glucose_level": 100.0,
+    "bmi": 22.0,
+    # Kidney Disease
+    "bp": 80.0,
+    "sg": 1.020,
+    "al": 0.0,
+    "su": 0.0,
+    "bgr": 100.0,
+    "bu": 40.0,
+    "sc": 1.0,
+    "sod": 140.0,
+    "pot": 4.5,
+    "hemo": 14.0,
+    "pcv": 44.0,
+    "wbcc": 8000.0,
+    "rbcc": 5.0,
 }
 
 # Display names mapping for clinical readability
@@ -48,7 +80,53 @@ FEATURE_DISPLAY_NAMES = {
     "SystolicBP": "Systolic BP",
     "DiastolicBP": "Diastolic BP",
     "BodyTemp": "Body Temperature",
-    "HeartRate": "Heart Rate"
+    "HeartRate": "Heart Rate",
+    # Heart Disease
+    "sex": "Sex",
+    "cp": "Chest Pain Type",
+    "trestbps": "Resting Blood Pressure",
+    "chol": "Serum Cholesterol",
+    "fbs": "Fasting Blood Sugar",
+    "restecg": "Resting ECG",
+    "thalach": "Max Heart Rate",
+    "exang": "Exercise-Induced Angina",
+    "oldpeak": "ST Depression",
+    "slope": "ST Segment Slope",
+    "ca": "Major Vessels (Fluoroscopy)",
+    "thal": "Thalassemia",
+    # Stroke
+    "hypertension": "Hypertension",
+    "heart_disease": "Heart Disease",
+    "ever_married": "Marital Status",
+    "work_type": "Work Type",
+    "Residence_type": "Residence Type",
+    "avg_glucose_level": "Avg Glucose Level",
+    "bmi": "BMI",
+    "smoking_status": "Smoking Status",
+    # Kidney
+    "bp": "Blood Pressure",
+    "sg": "Specific Gravity",
+    "al": "Albumin",
+    "su": "Sugar",
+    "rbc": "Red Blood Cells",
+    "pc": "Pus Cell",
+    "pcc": "Pus Cell Clumps",
+    "ba": "Bacteria",
+    "bgr": "Blood Glucose Random",
+    "bu": "Blood Urea",
+    "sc": "Serum Creatinine",
+    "sod": "Sodium",
+    "pot": "Potassium",
+    "hemo": "Haemoglobin",
+    "pcv": "Packed Cell Volume",
+    "wbcc": "White Blood Cell Count",
+    "rbcc": "Red Blood Cell Count",
+    "htn": "Hypertension",
+    "dm": "Diabetes Mellitus",
+    "cad": "Coronary Artery Disease",
+    "appet": "Appetite",
+    "pe": "Pedal Oedema",
+    "ane": "Anaemia",
 }
 
 def explain_prediction(model_name: str, input_df: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -73,10 +151,19 @@ def explain_prediction(model_name: str, input_df: pd.DataFrame) -> List[Dict[str
             clf = pipeline.steps[-1][1]
             if hasattr(clf, 'feature_importances_'):
                 importances = clf.feature_importances_
-                global_importances = {features[i]: float(importances[i]) for i in range(len(features))}
+                # Guard: ColumnTransformer pipelines expand features via OHE,
+                # so classifier may have more features than the input DataFrame.
+                if len(importances) == len(features):
+                    global_importances = {features[i]: float(importances[i]) for i in range(len(features))}
+                else:
+                    # Fallback to uniform when dimensions don't match
+                    global_importances = {f: 1.0 / len(features) for f in features}
             elif hasattr(clf, 'coef_'):
                 coefs = clf.coef_[0]
-                global_importances = {features[i]: float(abs(coefs[i])) for i in range(len(features))}
+                if len(coefs) == len(features):
+                    global_importances = {features[i]: float(abs(coefs[i])) for i in range(len(features))}
+                else:
+                    global_importances = {f: 1.0 / len(features) for f in features}
         except Exception:
             # Fallback uniform importances if metadata extraction fails
             global_importances = {f: 1.0 / len(features) for f in features}
@@ -88,16 +175,25 @@ def explain_prediction(model_name: str, input_df: pd.DataFrame) -> List[Dict[str
         # Calculate local contributions
         raw_contributions = []
         for feature in features:
-            val = float(feature_values[feature])
+            raw_val = feature_values[feature]
+            try:
+                val = float(raw_val)
+                display_val = str(round(val, 1))
+            except (ValueError, TypeError):
+                val = 0.0
+                display_val = str(raw_val)
+
             baseline = HEALTHY_BASELINES.get(feature, val)
             
             # Special formatting for display values
-            display_val = str(round(val, 1))
             if feature == "age":
-                display_val = f"{int(val / 365.25)} years"
+                display_val = f"{int(val / 365.25)} years" if val > 1000 else f"{int(val)} years"
             elif feature == "gluc" or feature == "cholesterol":
                 mapping = {1: "Normal", 2: "Borderline", 3: "High"}
-                display_val = mapping.get(int(val), "Normal")
+                try:
+                    display_val = mapping.get(int(val), str(raw_val))
+                except (ValueError, TypeError):
+                    display_val = str(raw_val)
             elif feature == "smoke":
                 display_val = "Yes" if val > 0 else "No"
             elif feature == "BS":

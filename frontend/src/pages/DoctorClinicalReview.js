@@ -1,10 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { 
-  ArrowLeft, Activity, Calendar, ShieldAlert, CheckCircle, 
-  FileText, Clock, ChevronRight, Stethoscope
-} from 'lucide-react';
+import { ArrowLeft, Activity, Stethoscope } from 'lucide-react';
 
 const DoctorClinicalReview = () => {
   const { patientId } = useParams();
@@ -18,11 +15,7 @@ const DoctorClinicalReview = () => {
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadReview();
-  }, [patientId]);
-
-  const loadReview = async () => {
+  const loadReview = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.clinicalReviews.getReview(patientId);
@@ -32,7 +25,11 @@ const DoctorClinicalReview = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [patientId]);
+
+  useEffect(() => {
+    loadReview();
+  }, [loadReview]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -105,7 +102,7 @@ const DoctorClinicalReview = () => {
 
           {/* Vitals */}
           <div className="glass" style={{ padding: '24px' }}>
-            <h3 className="chart-title">Latest Health Record</h3>
+            <h3 className="chart-title">Latest Nurse Assessment Vitals</h3>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px' }}>
               Recorded on: {new Date(health_record.recorded_at).toLocaleString()}
             </div>
@@ -113,26 +110,52 @@ const DoctorClinicalReview = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Blood Pressure</div>
-                <div style={{ fontWeight: 500 }}>{health_record.systolic_bp || '-'}/{health_record.diastolic_bp || '-'} mmHg</div>
+                <div style={{ fontWeight: 600 }}>{health_record.systolic_bp || '-'}/{health_record.diastolic_bp || '-'} mmHg</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Heart Rate</div>
-                <div style={{ fontWeight: 500 }}>{health_record.heart_rate || '-'} bpm</div>
+                <div style={{ fontWeight: 600 }}>{health_record.heart_rate ? `${health_record.heart_rate} bpm` : '-'}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Blood Glucose</div>
-                <div style={{ fontWeight: 500 }}>{health_record.blood_glucose || '-'} mg/dL</div>
+                <div style={{ fontWeight: 600 }}>{health_record.blood_glucose ? `${health_record.blood_glucose} mg/dL` : '-'}</div>
               </div>
               <div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>BMI</div>
-                <div style={{ fontWeight: 500 }}>{health_record.bmi ? Number(health_record.bmi).toFixed(1) : '-'}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>BMI (Weight/Height)</div>
+                <div style={{ fontWeight: 600 }}>
+                  {health_record.bmi ? Number(health_record.bmi).toFixed(1) : '-'}
+                  {health_record.weight && health_record.height ? ` (${health_record.weight}kg / ${health_record.height}cm)` : ''}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Body Temperature</div>
+                <div style={{ fontWeight: 600 }}>{health_record.temperature ? `${health_record.temperature} °F` : '-'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Cholesterol</div>
+                <div style={{ fontWeight: 600 }}>{health_record.cholesterol ? `${health_record.cholesterol} mg/dL` : '-'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Insulin Level</div>
+                <div style={{ fontWeight: 600 }}>{health_record.insulin ? `${health_record.insulin} µIU/mL` : '-'}</div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Smoking Status</div>
+                <div style={{ fontWeight: 600 }}>{health_record.smoking_status || '-'}</div>
               </div>
             </div>
 
             {health_record.symptoms && (
-              <div style={{ marginTop: '20px' }}>
-                <strong style={{ color: 'var(--text-primary)' }}>Reported Symptoms:</strong>
-                <p style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>{health_record.symptoms}</p>
+              <div style={{ marginTop: '20px', padding: '12px', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                <strong style={{ color: 'var(--danger)' }}>Reported Symptoms:</strong>
+                <p style={{ marginTop: '4px', color: 'var(--text-primary)', margin: '4px 0 0' }}>{health_record.symptoms}</p>
+              </div>
+            )}
+
+            {health_record.clinical_notes && (
+              <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <strong style={{ color: 'var(--text-primary)' }}>Nurse Clinical Notes:</strong>
+                <p style={{ marginTop: '4px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>{health_record.clinical_notes}</p>
               </div>
             )}
           </div>

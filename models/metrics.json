@@ -10,5 +10,20 @@
     "MATERNAL": {
         "accuracy": 0.8,
         "f1_score": 0.0
+    },
+    "HEART_DISEASE": {
+        "accuracy": null,
+        "f1_score": null,
+        "note": "Pre-trained model loaded from heart_disease_risk_model.pkl. Training metrics not available."
+    },
+    "STROKE": {
+        "accuracy": null,
+        "f1_score": null,
+        "note": "Pre-trained model loaded from stroke_model.pkl. Training metrics not available."
+    },
+    "KIDNEY": {
+        "accuracy": null,
+        "f1_score": null,
+        "note": "Pre-trained model loaded from kidney_model.pkl. Training metrics not available."
     }
 }

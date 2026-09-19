@@ -7,6 +7,7 @@ import datetime
 from ..database import get_db
 from ..schemas import FieldVisit as FieldVisitSchema, FieldVisitCreate, User
 from .auth import get_current_user
+from .patients import enforce_patient_area_access
 from ..services.audit import log_audit
 
 router = APIRouter(prefix="/field-visits", tags=["Field Visits"])
@@ -41,12 +42,7 @@ def start_field_visit(
         raise HTTPException(status_code=404, detail="Patient not found")
 
     # Authorize location
-    if current_user.get("role") == 'NURSE':
-        if str(patient.get("village_id")) != str(current_user.get("village_id")):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. Patient belongs to another village."
-            )
+    enforce_patient_area_access(current_user, patient, db)
 
     # Set properties
     db_visit = visit_data.dict(exclude_unset=True)
@@ -171,12 +167,7 @@ def get_patient_field_visits(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
-    if current_user.get("role") == 'NURSE':
-        if str(patient.get("village_id")) != str(current_user.get("village_id")):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. Patient belongs to another village."
-            )
+    enforce_patient_area_access(current_user, patient, db)
             
     visits = list(db.field_visits.find({"patient_id": patient_id}).sort("created_at", -1))
     return [serialize_doc(v) for v in visits]

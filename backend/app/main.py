@@ -1,13 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import traceback
 
-from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews
+from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push
 app = FastAPI(
     title="RuralCare AI - Healthcare Risk Prediction API",
     description="Backend API for AI-Powered Rural Healthcare Analytics and Risk Prediction",
     version="1.0.0"
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": traceback.format_exc()}
+    )
 
 # CORS Configuration
 # Allows React Vite development server (running on port 5173) to communicate with API
@@ -30,6 +40,7 @@ app.include_router(followups.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(field_visits.router, prefix="/api")
+app.include_router(push.router, prefix="/api/push", tags=["push"])
 app.include_router(notifications.router, prefix="/api")
 app.include_router(patient_portal.router, prefix="/api")
 app.include_router(clinical_reviews.router, prefix="/api")

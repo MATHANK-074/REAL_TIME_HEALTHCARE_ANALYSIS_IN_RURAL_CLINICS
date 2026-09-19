@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { 
-  Plus, 
   Search, 
   UserPlus, 
   Heart, 
   Activity, 
-  AlertTriangle,
   CheckCircle,
-  FileText,
   User,
   Navigation,
   Calendar
@@ -135,7 +132,7 @@ const NurseDashboard = ({ user }) => {
   const [vNotes, setVNotes] = useState('');
 
   // Load patients list
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
     try {
       const data = await api.getPatients(searchQuery);
       setPatients(data);
@@ -143,9 +140,9 @@ const NurseDashboard = ({ user }) => {
       setError('Failed to fetch patients: ' + (e.message || e));
       console.error('Failed to fetch patients', e);
     }
-  };
+  }, [searchQuery]);
 
-  const loadVillages = async () => {
+  const loadVillages = useCallback(async () => {
     if (user.role === 'ADMIN') {
       try {
         const data = await api.getVillages();
@@ -154,25 +151,26 @@ const NurseDashboard = ({ user }) => {
         console.error('Failed to fetch villages', e);
       }
     }
-  };
+  }, [user.role]);
 
-  const loadFieldVisits = async () => {
+  const loadFieldVisits = useCallback(async () => {
     try {
       const data = await api.getFieldVisits();
       setFieldVisits(data);
     } catch (e) {
       console.error('Failed to fetch field visits', e);
     }
-  };
+  }, []);
 
-  const loadFollowups = async () => {
+  const loadFollowups = useCallback(async () => {
     try {
       const data = await api.getFollowups();
-      setFollowups(data);
+      const activeFollowups = data.filter(f => f.status !== 'COMPLETED' && f.status !== 'CANCELLED');
+      setFollowups(activeFollowups);
     } catch (e) {
       console.error('Failed to fetch followups', e);
     }
-  };
+  }, []);
 
   // Helper to reset vitals form
   const resetVitals = () => {
@@ -196,7 +194,7 @@ const NurseDashboard = ({ user }) => {
     loadFieldVisits();
     loadFollowups();
     loadVillages();
-  }, [searchQuery, user.role]);
+  }, [loadPatients, loadFieldVisits, loadFollowups, loadVillages]);
 
   const handleRegisterPatient = async (e) => {
     e.preventDefault();
@@ -250,7 +248,7 @@ const NurseDashboard = ({ user }) => {
     setSuccess('');
     try {
       // Log health record
-      const record = await api.logVitals({
+      await api.logVitals({
         patient_id: selectedPatient.id,
         weight: vWeight ? parseFloat(vWeight) : null,
         height: vHeight ? parseFloat(vHeight) : null,

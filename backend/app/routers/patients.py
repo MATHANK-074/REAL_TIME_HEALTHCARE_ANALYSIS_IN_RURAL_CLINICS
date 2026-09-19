@@ -22,13 +22,37 @@ def enforce_patient_area_access(current_user: User, patient: dict, db: Database)
         user_village = current_user.get("village_id")
         
         if user_area:
-            if str(patient.get("area_id")) != str(user_area):
+            patient_area = str(patient.get("area_id")) if patient.get("area_id") else None
+            patient_village = str(patient.get("village_id")) if patient.get("village_id") else None
+            allowed = False
+            if patient_area and patient_area == str(user_area):
+                allowed = True
+            elif patient_village:
+                try:
+                    area_doc = db.areas.find_one({"_id": ObjectId(user_area)})
+                except Exception:
+                    area_doc = db.areas.find_one({"_id": user_area})
+                if area_doc and str(area_doc.get("village_id")) == patient_village:
+                    allowed = True
+            if not allowed:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied. Patient is in a different Area."
                 )
         elif user_village:
-            if str(patient.get("village_id")) != str(user_village):
+            patient_village = str(patient.get("village_id")) if patient.get("village_id") else None
+            patient_area = str(patient.get("area_id")) if patient.get("area_id") else None
+            allowed = False
+            if patient_village and patient_village == str(user_village):
+                allowed = True
+            elif patient_area:
+                try:
+                    area_doc = db.areas.find_one({"_id": ObjectId(patient_area)})
+                except Exception:
+                    area_doc = db.areas.find_one({"_id": patient_area})
+                if area_doc and str(area_doc.get("village_id")) == str(user_village):
+                    allowed = True
+            if not allowed:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied. Patient belongs to another nurse's assigned village."
@@ -38,20 +62,34 @@ def enforce_patient_area_access(current_user: User, patient: dict, db: Database)
         user_clinic = current_user.get("clinic_id")
         user_sub = current_user.get("subdistrict_id")
         
-        if user_clinic:
-            if str(patient.get("clinic_id")) != str(user_clinic):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied. Patient does not belong to your assigned Clinic."
-                )
-        elif user_sub:
-            assigned_villages = list(db.villages.find({"subdistrict_id": str(user_sub)}))
-            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
-            if str(patient.get("village_id")) not in assigned_village_ids:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied. Patient belongs to a village outside your jurisdiction."
-                )
+        if user_clinic and not user_sub:
+            try:
+                clinic_doc = db.clinics.find_one({"_id": ObjectId(user_clinic)})
+            except Exception:
+                clinic_doc = db.clinics.find_one({"_id": user_clinic})
+            if clinic_doc and clinic_doc.get("subdistrict_id"):
+                user_sub = str(clinic_doc.get("subdistrict_id"))
+        
+        patient_clinic = str(patient.get("clinic_id")) if patient.get("clinic_id") else None
+        patient_village = str(patient.get("village_id")) if patient.get("village_id") else None
+        
+        allowed = False
+        if not user_clinic and not user_sub:
+            allowed = True
+        else:
+            if user_clinic and patient_clinic and patient_clinic == str(user_clinic):
+                allowed = True
+            if not allowed and user_sub and patient_village:
+                assigned_villages = list(db.villages.find({"subdistrict_id": str(user_sub)}))
+                assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+                if patient_village in assigned_village_ids:
+                    allowed = True
+                    
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Patient is outside your assigned clinic or jurisdiction."
+            )
 
 def serialize_doc(doc):
     if doc and "_id" in doc:
@@ -76,12 +114,27 @@ def get_patients(
             filter_query["village_id"] = str(current_user.get("village_id"))
             
     elif current_user.get("role") == 'DOCTOR':
-        if current_user.get("clinic_id"):
-            filter_query["clinic_id"] = str(current_user.get("clinic_id"))
-        elif current_user.get("subdistrict_id"):
-            assigned_villages = list(db.villages.find({"subdistrict_id": str(current_user.get("subdistrict_id"))}))
+        user_clinic = current_user.get("clinic_id")
+        user_sub = current_user.get("subdistrict_id")
+        if user_clinic and not user_sub:
+            try:
+                clinic_doc = db.clinics.find_one({"_id": ObjectId(user_clinic)})
+            except Exception:
+                clinic_doc = db.clinics.find_one({"_id": user_clinic})
+            if clinic_doc and clinic_doc.get("subdistrict_id"):
+                user_sub = str(clinic_doc.get("subdistrict_id"))
+                
+        or_conditions = []
+        if user_clinic:
+            or_conditions.append({"clinic_id": str(user_clinic)})
+        if user_sub:
+            assigned_villages = list(db.villages.find({"subdistrict_id": str(user_sub)}))
             assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
-            filter_query["village_id"] = {"$in": assigned_village_ids}
+            if assigned_village_ids:
+                or_conditions.append({"village_id": {"$in": assigned_village_ids}})
+                
+        if or_conditions:
+            filter_query["$or"] = or_conditions
     
     # 2. Apply optional filters
     if village_id:
@@ -97,53 +150,67 @@ def get_patients(
     patients = list(db.patients.find(filter_query).sort("_id", -1))
     return [serialize_doc(p) for p in patients]
 
+def find_by_id(collection, doc_id):
+    if not doc_id:
+        return None
+    if isinstance(doc_id, ObjectId):
+        return collection.find_one({"_id": doc_id})
+    doc_id_str = str(doc_id)
+    if ObjectId.is_valid(doc_id_str):
+        res = collection.find_one({"_id": ObjectId(doc_id_str)})
+        if res:
+            return res
+    return collection.find_one({"_id": doc_id_str})
+
 @router.get("/{patient_id}", response_model=PatientSchema)
 def get_patient(patient_id: str, db: Database = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Retrieve a specific patient's details with location access checking."""
-    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
+    patient = find_by_id(db.patients, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
     
+    v = None
     # Enrich with Location Names
     if patient.get("village_id"):
-        v = db.villages.find_one({"_id": ObjectId(patient["village_id"])})
+        v = find_by_id(db.villages, patient["village_id"])
         if v:
             patient["village"] = v.get("name")
-            sub = db.subdistricts.find_one({"_id": ObjectId(v.get("subdistrict_id"))})
-            if sub:
-                patient["subdistrict"] = sub.get("name")
-                dist = db.districts.find_one({"_id": ObjectId(sub.get("district_id"))})
-                if dist:
-                    patient["district"] = dist.get("name")
+            if v.get("subdistrict_id"):
+                sub = find_by_id(db.subdistricts, v.get("subdistrict_id"))
+                if sub:
+                    patient["subdistrict"] = sub.get("name")
+                    if sub.get("district_id"):
+                        dist = find_by_id(db.districts, sub.get("district_id"))
+                        if dist:
+                            patient["district"] = dist.get("name")
                     
     if patient.get("area_id"):
-        a = db.areas.find_one({"_id": ObjectId(patient["area_id"])})
+        a = find_by_id(db.areas, patient["area_id"])
         if a:
             patient["area_name"] = a.get("name")
             
     if patient.get("clinic_id"):
-        c = db.clinics.find_one({"_id": ObjectId(patient["clinic_id"])})
+        c = find_by_id(db.clinics, patient["clinic_id"])
         if c:
             patient["clinic_name"] = c.get("clinic_name")
             
     # Enrich with Assigned Nurse / Doctor
-    # Find Nurse for this patient's area/village
     nurse_query = {"role": "NURSE"}
     if patient.get("area_id"):
-        nurse_query["area_id"] = patient["area_id"]
+        nurse_query["area_id"] = str(patient["area_id"])
     elif patient.get("village_id"):
-        nurse_query["village_id"] = patient["village_id"]
+        nurse_query["village_id"] = str(patient["village_id"])
     nurses = list(db.users.find(nurse_query))
     if nurses:
         patient["assigned_nurse"] = ", ".join([n.get("name") for n in nurses])
         
     doctor_query = {"role": "DOCTOR"}
     if patient.get("clinic_id"):
-        doctor_query["clinic_id"] = patient["clinic_id"]
+        doctor_query["clinic_id"] = str(patient["clinic_id"])
     elif v and v.get("subdistrict_id"):
-        doctor_query["subdistrict_id"] = v.get("subdistrict_id")
+        doctor_query["subdistrict_id"] = str(v.get("subdistrict_id"))
     doctors = list(db.users.find(doctor_query))
     if doctors:
         patient["assigned_doctor"] = ", ".join([d.get("name") for d in doctors])
@@ -191,6 +258,20 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
     db_patient = patient_data.dict()
     db_patient["patient_code"] = patient_code
     db_patient["village_id"] = str(target_village_id)
+    
+    # Auto-link clinic_id if missing
+    if not db_patient.get("clinic_id"):
+        if current_user.get("clinic_id"):
+            db_patient["clinic_id"] = str(current_user.get("clinic_id"))
+        elif target_village_id:
+            try:
+                v = db.villages.find_one({"_id": ObjectId(target_village_id)})
+                if v and v.get("subdistrict_id"):
+                    c = db.clinics.find_one({"subdistrict_id": str(v["subdistrict_id"])})
+                    if c:
+                        db_patient["clinic_id"] = str(c["_id"])
+            except Exception:
+                pass
     
     result = db.patients.insert_one(db_patient)
     db_patient["_id"] = result.inserted_id

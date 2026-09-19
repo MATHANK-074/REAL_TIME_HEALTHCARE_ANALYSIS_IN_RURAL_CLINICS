@@ -1,18 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Activity, Calendar, FileText, CheckCircle2 } from 'lucide-react';
+import { Activity, Calendar, FileText, CheckCircle2, Bell, BellOff } from 'lucide-react';
+import { checkPushSupport, subscribeUserToPush, unsubscribeUserFromPush, getPushSubscriptionStatus } from '../services/pushNotifications';
 
 const PatientDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushSupported, setPushSupported] = useState(true);
+  const [pushLoading, setPushLoading] = useState(false);
+  
   const userStr = localStorage.getItem('user');
   const user = userStr ? JSON.parse(userStr) : null;
 
   useEffect(() => {
     loadDashboard();
+    checkPushStatus();
   }, []);
+
+  const checkPushStatus = async () => {
+    if (!checkPushSupport()) {
+      setPushSupported(false);
+      return;
+    }
+    const status = await getPushSubscriptionStatus();
+    setPushEnabled(status);
+  };
+
+  const handleTogglePush = async () => {
+    try {
+      setPushLoading(true);
+      if (pushEnabled) {
+        await unsubscribeUserFromPush();
+        setPushEnabled(false);
+      } else {
+        await subscribeUserToPush();
+        setPushEnabled(true);
+      }
+    } catch (err) {
+      alert(err.message || "Failed to change notification settings");
+    } finally {
+      setPushLoading(false);
+    }
+  };
 
   const loadDashboard = async () => {
     try {
@@ -87,6 +119,34 @@ const PatientDashboard = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* Notification Settings */}
+      <div style={{ marginTop: '30px', background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1e293b', marginBottom: '16px' }}>Notifications</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '20px' }}>
+          <div>
+            <p style={{ color: '#475569', margin: 0, fontWeight: 500 }}>Browser notifications</p>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '4px', marginBottom: 0 }}>
+              {!pushSupported 
+                ? 'Browser notifications are not supported on this device.' 
+                : pushEnabled 
+                  ? '✓ Notifications enabled' 
+                  : 'Notifications are currently disabled.'}
+            </p>
+          </div>
+          {pushSupported && (
+            <button 
+              onClick={handleTogglePush}
+              disabled={pushLoading}
+              className={pushEnabled ? "btn btn-secondary" : "btn btn-primary"}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {pushEnabled ? <BellOff size={18} /> : <Bell size={18} />}
+              {pushLoading ? 'Updating...' : pushEnabled ? 'Disable notifications' : 'Enable notifications'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

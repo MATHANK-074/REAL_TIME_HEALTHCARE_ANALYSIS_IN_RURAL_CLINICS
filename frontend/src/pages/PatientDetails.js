@@ -1,20 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { 
-  ArrowLeft, 
-  User, 
-  Calendar, 
-  Heart, 
-  Activity, 
-  Plus,
-  Clock,
-  CheckCircle,
-  XCircle,
-  PlusCircle,
-  FileText,
-  AlertTriangle
-} from 'lucide-react';
+import { ArrowLeft, PlusCircle, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const PatientDetails = () => {
@@ -42,40 +29,41 @@ const PatientDetails = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const loadPatientData = async () => {
+  const loadPatientData = useCallback(async () => {
     try {
       setLoading(true);
+      setError('');
       
       const pData = await api.getPatient(id);
       setPatient(pData);
       
-      const rData = await api.getPatientRecords(id);
-      setRecords(rData);
+      const rData = await api.getPatientRecords(id).catch(() => []);
+      setRecords(rData || []);
       
-      const predData = await api.getPatientPredictions(id);
-      setPredictions(predData);
-      if (predData.length > 0) {
+      const predData = await api.getPatientPredictions(id).catch(() => []);
+      setPredictions(predData || []);
+      if (predData && predData.length > 0) {
         // Select latest prediction by default
         setSelectedPrediction(predData[0]);
       }
       
       // Load patient followups
-      const allFollowups = await api.getFollowups();
-      setFollowups(allFollowups.filter(f => f.patient_id === id));
+      const allFollowups = await api.getFollowups().catch(() => []);
+      setFollowups((allFollowups || []).filter(f => f.patient_id === id));
       
       // Load field visits
-      const visits = await api.getFieldVisits('', id);
-      setFieldVisits(visits);
+      const visits = await api.getFieldVisits('', id).catch(() => []);
+      setFieldVisits(visits || []);
     } catch (e) {
-      setError('Failed to load patient profile details.');
+      setError(e.message || 'Failed to load patient profile details.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     loadPatientData();
-  }, [id]);
+  }, [loadPatientData]);
 
   const handleCreateFollowup = async (e) => {
     e.preventDefault();
@@ -281,7 +269,7 @@ const PatientDetails = () => {
                         <td><strong>{new Date(r.recorded_at).toLocaleDateString()}</strong></td>
                         <td>{r.systolic_bp}/{r.diastolic_bp} mmHg | {r.heart_rate} bpm | {r.temperature}°F</td>
                         <td>{r.blood_glucose} mg/dL | {r.cholesterol || '-'}</td>
-                        <td>{r.weight} kg | BMI: {r.bmi ? r.bmi.toFixed(1) : '-'}</td>
+                        <td>{r.weight} kg | BMI: {r.bmi && !isNaN(r.bmi) ? Number(r.bmi).toFixed(1) : '-'}</td>
                       </tr>
                     ))
                   )}

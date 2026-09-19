@@ -147,7 +147,13 @@ class Patient(PatientBase, MongoBaseModel):
     patient_code: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    village: Optional[Village] = None
+    village: Optional[Any] = None
+    subdistrict: Optional[Any] = None
+    district: Optional[Any] = None
+    area_name: Optional[str] = None
+    clinic_name: Optional[str] = None
+    assigned_nurse: Optional[str] = None
+    assigned_doctor: Optional[str] = None
 
 
 # Health Record Schemas
@@ -312,7 +318,7 @@ class DoctorReview(DoctorReviewBase, MongoBaseModel):
 
 # FieldVisit Schemas (New)
 class FieldVisitBase(BaseModel):
-    nurse_id: str
+    nurse_id: Optional[str] = None
     patient_id: str
     clinic_id: Optional[str] = None
     area_id: Optional[str] = None
@@ -347,4 +353,17 @@ class Notification(BaseModel):
     followup_id: Optional[str] = None
     link: Optional[str] = None
 
-    created_at: datetime
+
+# Push Notification Schemas
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    user_agent: Optional[str] = None
+
+class VapidPublicKeyResponse(BaseModel):
+    public_key: str
+

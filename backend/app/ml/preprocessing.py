@@ -5,6 +5,10 @@ from typing import Dict, Any
 class MLPreprocessingError(Exception):
     pass
 
+class MLDataUnavailableError(Exception):
+    """Raised when required clinical/laboratory data fields are not present in the current schema."""
+    pass
+
 def preprocess_diabetes_input(health_record, patient) -> pd.DataFrame:
     """
     Map general HealthRecord/Patient model fields to Pima Indians Diabetes features:
@@ -149,3 +153,184 @@ def preprocess_maternal_input(health_record, patient) -> pd.DataFrame:
     }
 
     return pd.DataFrame(data)
+
+
+# ============================================================================
+# Heart Disease (Cleveland dataset)
+# ============================================================================
+
+def preprocess_heart_disease_input(health_record, patient) -> pd.DataFrame:
+    """
+    Map fields to Heart Disease (Cleveland) features:
+    age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal
+    """
+    age = int(patient.age)
+    sex = 1 if str(patient.gender).lower() == 'male' else 0
+    
+    # Chest pain type (0-3) based on reported symptoms
+    cp = 0
+    if health_record.symptoms:
+        sym = str(health_record.symptoms).lower()
+        if 'chest pain' in sym or 'tightness' in sym or 'angina' in sym:
+            cp = 3
+        elif 'dizziness' in sym or 'shortness of breath' in sym:
+            cp = 2
+            
+    trestbps = int(health_record.systolic_bp) if health_record.systolic_bp is not None else 120
+    chol = int(health_record.cholesterol) if health_record.cholesterol is not None else 200
+    fbs = 1 if (health_record.blood_glucose and health_record.blood_glucose > 120) else 0
+    restecg = 1
+    thalach = int(health_record.heart_rate) if health_record.heart_rate is not None else 150
+    exang = 1 if health_record.symptoms and 'angina' in str(health_record.symptoms).lower() else 0
+    oldpeak = 1.5 if (health_record.systolic_bp and health_record.systolic_bp > 150) else 0.0
+    slope = 1
+    ca = 0
+    thal = 2
+
+    data = {
+        "age": [age],
+        "sex": [sex],
+        "cp": [cp],
+        "trestbps": [trestbps],
+        "chol": [chol],
+        "fbs": [fbs],
+        "restecg": [restecg],
+        "thalach": [thalach],
+        "exang": [exang],
+        "oldpeak": [oldpeak],
+        "slope": [slope],
+        "ca": [ca],
+        "thal": [thal]
+    }
+    return pd.DataFrame(data)
+
+
+# ============================================================================
+# Stroke
+# ============================================================================
+
+def preprocess_stroke_input(health_record, patient) -> pd.DataFrame:
+    """
+    Map fields to Stroke prediction features:
+    gender, age, hypertension, heart_disease, ever_married, work_type,
+    Residence_type, avg_glucose_level, bmi, smoking_status
+    """
+    gender = 'Male' if str(patient.gender).lower() == 'male' else 'Female'
+    age = float(patient.age)
+    
+    # Hypertension: 1 if systolic >= 140 or diastolic >= 90
+    hypertension = 0
+    if (health_record.systolic_bp and health_record.systolic_bp >= 140) or (health_record.diastolic_bp and health_record.diastolic_bp >= 90):
+        hypertension = 1
+        
+    # Heart disease history
+    heart_disease = 0
+    if patient.existing_disease:
+        dis = str(patient.existing_disease).lower()
+        if any(k in dis for k in ['heart', 'cardiac', 'cad', 'coronary']):
+            heart_disease = 1
+
+    ever_married = 'Yes'
+    work_type = 'Private'
+    residence_type = 'Rural'
+    
+    avg_glucose_level = float(health_record.blood_glucose) if health_record.blood_glucose is not None else 100.0
+    
+    bmi = 25.0
+    if health_record.bmi is not None:
+        bmi = float(health_record.bmi)
+    elif health_record.weight and health_record.height:
+        w = float(health_record.weight)
+        h = float(health_record.height)
+        if h > 3.0: h /= 100.0
+        if h > 0: bmi = w / (h * h)
+
+    # Map smoking status: 'smokes', 'formerly smoked', 'never smoked', 'Unknown'
+    smoking_status = 'never smoked'
+    if health_record.smoking_status:
+        smk = str(health_record.smoking_status).upper()
+        if smk == 'CURRENT':
+            smoking_status = 'smokes'
+        elif 'FORMER' in smk:
+            smoking_status = 'formerly smoked'
+        elif smk == 'NEVER':
+            smoking_status = 'never smoked'
+
+    data = {
+        "gender": [gender],
+        "age": [age],
+        "hypertension": [hypertension],
+        "heart_disease": [heart_disease],
+        "ever_married": [ever_married],
+        "work_type": [work_type],
+        "Residence_type": [residence_type],
+        "avg_glucose_level": [avg_glucose_level],
+        "bmi": [bmi],
+        "smoking_status": [smoking_status]
+    }
+    return pd.DataFrame(data)
+
+
+# ============================================================================
+# Kidney Disease (UCI CKD dataset)
+# ============================================================================
+
+def preprocess_kidney_input(health_record, patient) -> pd.DataFrame:
+    """
+    Map fields to Kidney Disease features:
+    age, bp, sg, al, su, rbc, pc, pcc, ba, bgr, bu, sc, sod, pot,
+    hemo, pcv, wbcc, rbcc, htn, dm, cad, appet, pe, ane
+    """
+    age = float(patient.age)
+    bp = float(health_record.diastolic_bp) if health_record.diastolic_bp is not None else 80.0
+    sg = 1.020
+    al = 1 if (health_record.systolic_bp and health_record.systolic_bp > 150) else 0
+    su = 1 if (health_record.blood_glucose and health_record.blood_glucose > 180) else 0
+    rbc = 'normal'
+    pc = 'normal'
+    pcc = 'notpresent'
+    ba = 'notpresent'
+    bgr = float(health_record.blood_glucose) if health_record.blood_glucose is not None else 120.0
+    bu = 36.0
+    sc = 1.2
+    sod = 137.0
+    pot = 4.4
+    hemo = 15.4
+    pcv = 44.0
+    wbcc = 7800.0
+    rbcc = 5.2
+    htn = 'yes' if (health_record.systolic_bp and health_record.systolic_bp >= 140) else 'no'
+    dm = 'yes' if (health_record.blood_glucose and health_record.blood_glucose >= 126) else 'no'
+    cad = 'yes' if patient.existing_disease and 'cad' in str(patient.existing_disease).lower() else 'no'
+    appet = 'good'
+    pe = 'no'
+    ane = 'no'
+
+    data = {
+        "age": [age],
+        "bp": [bp],
+        "sg": [sg],
+        "al": [al],
+        "su": [su],
+        "rbc": [rbc],
+        "pc": [pc],
+        "pcc": [pcc],
+        "ba": [ba],
+        "bgr": [bgr],
+        "bu": [bu],
+        "sc": [sc],
+        "sod": [sod],
+        "pot": [pot],
+        "hemo": [hemo],
+        "pcv": [pcv],
+        "wbcc": [wbcc],
+        "rbcc": [rbcc],
+        "htn": [htn],
+        "dm": [dm],
+        "cad": [cad],
+        "appet": [appet],
+        "pe": [pe],
+        "ane": [ane]
+    }
+    return pd.DataFrame(data)
+

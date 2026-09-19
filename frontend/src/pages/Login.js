@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { 
-  Activity, Mail, Lock, Stethoscope, Shield, AlertCircle, Eye, EyeOff, LockKeyhole,
-  MapPin, Hospital, FileText, UserCheck, HeartPulse, CheckCircle2, Brain 
+  Mail, Lock, Shield, AlertCircle, Eye, EyeOff, LockKeyhole,
+  MapPin, Brain 
 } from 'lucide-react';
 import './Login.css';
 

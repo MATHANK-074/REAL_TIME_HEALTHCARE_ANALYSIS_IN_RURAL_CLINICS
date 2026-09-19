@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ruralcare-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.11
+      - key: RISK_CONFIG_PATH
+        value: backend/app/ml/risk_config.json

@@ -19,8 +19,6 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
     googleMapsApiKey: GOOGLE_MAPS_API_KEY
   });
 
-  const [assignedCoords, setAssignedCoords] = useState(null);
-
   const requestGPS = () => {
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser.');
@@ -39,7 +37,6 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
           accuracy: position.coords.accuracy,
         });
         setStatus('captured');
-        setAssignedCoords([position.coords.latitude, position.coords.longitude]); // Mock assigned coords
       },
       (err) => {
         setError(`Unable to retrieve your location: ${err.message}`);
@@ -80,7 +77,7 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
     try {
       if (!visitId) {
         // Start and complete at same time if they didn't hit start
-        const visit = await api.startFieldVisit({
+        await api.startFieldVisit({
           patient_id: patient.id,
           latitude: location?.lat || null,
           longitude: location?.lng || null,
@@ -119,7 +116,7 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
 
         {apiError && (
           <div className="badge badge-danger" style={{ display: 'block', padding: '10px', marginBottom: '15px' }}>
-            {apiError}
+            {typeof apiError === 'string' ? apiError : JSON.stringify(apiError)}
           </div>
         )}
 

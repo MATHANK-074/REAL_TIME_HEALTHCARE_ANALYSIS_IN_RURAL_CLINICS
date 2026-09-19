@@ -13,6 +13,7 @@ from ..services.notification_service import (
     notify_followup_completed,
     notify_followup_missed,
 )
+from ..services.audit import log_audit
 
 import datetime
 
@@ -36,7 +37,10 @@ def create_followup(
     enforce_patient_area_access(current_user, patient, db)
     
     db_followup = followup_data.dict()
-    db_followup["doctor_id"] = str(current_user.id) if current_user.get("role") == 'DOCTOR' else str(patient.get("doctor_id", "1"))
+    if type(db_followup.get("followup_date")) is datetime.date:
+        db_followup["followup_date"] = datetime.datetime.combine(db_followup["followup_date"], datetime.datetime.min.time())
+
+    db_followup["doctor_id"] = str(current_user.get("id")) if current_user.get("role") == 'DOCTOR' else str(patient.get("doctor_id", "1"))
     db_followup["nurse_id"] = str(patient.get("nurse_id")) if patient.get("nurse_id") else None
     db_followup["clinic_id"] = str(patient.get("clinic_id")) if patient.get("clinic_id") else None
     db_followup["area_id"] = str(patient.get("area_id")) if patient.get("area_id") else None
@@ -54,6 +58,11 @@ def create_followup(
     
     # Notify nurse about new follow‑up
     notify_followup_created(db, db_followup, patient)
+    
+    # Notify patient about the scheduled follow-up (this will trigger web push)
+    from ..services.notification_service import notify_patient_followup_updated
+    notify_patient_followup_updated(db, db_followup, patient)
+    
     log_audit(db, str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), "CREATE_FOLLOWUP", "followups", str(db_followup["_id"]), f"Scheduled followup for {patient.get('name')} on {db_followup['followup_date']}")
     
     return serialize_doc(db_followup)
@@ -127,8 +136,11 @@ def update_followup(
         update_fields["notes"] = followup_data.notes
         followup["notes"] = followup_data.notes
     if followup_data.followup_date:
-        update_fields["followup_date"] = followup_data.followup_date
-        followup["followup_date"] = followup_data.followup_date
+        dt = followup_data.followup_date
+        if type(dt) is datetime.date:
+            dt = datetime.datetime.combine(dt, datetime.datetime.min.time())
+        update_fields["followup_date"] = dt
+        followup["followup_date"] = dt
     if followup_data.priority:
         update_fields["priority"] = followup_data.priority.upper()
         followup["priority"] = followup_data.priority.upper()

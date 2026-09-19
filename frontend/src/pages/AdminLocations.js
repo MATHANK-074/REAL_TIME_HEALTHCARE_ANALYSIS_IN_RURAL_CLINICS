@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { MapPin, Plus, Edit2, Save, X, Navigation, Building2, Home } from 'lucide-react';
+import { MapPin, Plus, X, Navigation, Building2, Home } from 'lucide-react';
 
 const AdminLocations = () => {
   const [districts, setDistricts] = useState([]);

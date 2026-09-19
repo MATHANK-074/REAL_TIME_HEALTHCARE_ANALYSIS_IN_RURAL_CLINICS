@@ -95,15 +95,29 @@ def get_pending_reviews(
     filter_query = {"review_status": "PENDING_REVIEW"}
     
     if current_user.get("role") == 'DOCTOR':
-        if current_user.get("clinic_id"):
-            patients_in_clinic = list(db.patients.find({"clinic_id": str(current_user.get("clinic_id"))}, {"_id": 1}))
-            p_ids = [str(p["_id"]) for p in patients_in_clinic]
-            filter_query["patient_id"] = {"$in": p_ids}
-        elif current_user.get("subdistrict_id"):
-            assigned_villages = list(db.villages.find({"subdistrict_id": str(current_user.get("subdistrict_id"))}))
+        clinic_id = current_user.get("clinic_id")
+        subdistrict_id = current_user.get("subdistrict_id")
+        
+        if clinic_id and not subdistrict_id:
+            try:
+                c = db.clinics.find_one({"_id": ObjectId(clinic_id)})
+                if c and c.get("subdistrict_id"):
+                    subdistrict_id = str(c["subdistrict_id"])
+            except Exception:
+                pass
+
+        query_conditions = []
+        if clinic_id:
+            query_conditions.append({"clinic_id": str(clinic_id)})
+        if subdistrict_id:
+            assigned_villages = list(db.villages.find({"subdistrict_id": str(subdistrict_id)}))
             assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
-            patients_in_villages = list(db.patients.find({"village_id": {"$in": assigned_village_ids}}, {"_id": 1}))
-            p_ids = [str(p["_id"]) for p in patients_in_villages]
+            if assigned_village_ids:
+                query_conditions.append({"village_id": {"$in": assigned_village_ids}})
+
+        if query_conditions:
+            patients = list(db.patients.find({"$or": query_conditions}, {"_id": 1}))
+            p_ids = [str(p["_id"]) for p in patients]
             filter_query["patient_id"] = {"$in": p_ids}
             
     records = list(db.health_records.find(filter_query).sort("recorded_at", -1))
