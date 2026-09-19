@@ -89,8 +89,18 @@ def get_doctor_dashboard(
         "status": "PENDING"
     })
 
+    def get_pred_sort_key(pred_item):
+        val = pred_item.get("predicted_at") or pred_item.get("created_at")
+        if isinstance(val, datetime.datetime):
+            return val.isoformat()
+        if isinstance(val, str):
+            return val
+        if "_id" in pred_item and hasattr(pred_item["_id"], "generation_time"):
+            return pred_item["_id"].generation_time.isoformat()
+        return ""
+
     high_risk_preds = [p for p in latest_predictions if p.get("risk_level") == "HIGH"]
-    high_risk_preds.sort(key=lambda x: x.get("predicted_at", datetime.datetime.min), reverse=True)
+    high_risk_preds.sort(key=get_pred_sort_key, reverse=True)
     high_risk_preds = high_risk_preds[:15]
 
     formatted_high_risk = []
