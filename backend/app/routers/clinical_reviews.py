@@ -103,16 +103,28 @@ def get_clinical_review_queue(
         if not p:
             continue
         
+        gen_at = r.get("generated_at") or r.get("created_at")
+        if not gen_at and "_id" in r:
+            try:
+                if isinstance(r["_id"], ObjectId):
+                    gen_at = r["_id"].generation_time.isoformat()
+                elif ObjectId.is_valid(str(r["_id"])):
+                    gen_at = ObjectId(str(r["_id"])).generation_time.isoformat()
+            except Exception:
+                pass
+        if not gen_at:
+            gen_at = datetime.datetime.utcnow().isoformat()
+
         queue.append({
             "id": str(r["_id"]),
-            "patient_id": r["patient_id"],
+            "patient_id": str(r["patient_id"]),
             "patient_name": p.get("name"),
             "patient_code": p.get("patient_code"),
             "age": p.get("age"),
             "gender": p.get("gender"),
             "overall_priority": r.get("overall_priority"),
             "status": r.get("status"),
-            "generated_at": r.get("generated_at"),
+            "generated_at": gen_at,
             "condition_results": r.get("condition_results", [])
         })
         

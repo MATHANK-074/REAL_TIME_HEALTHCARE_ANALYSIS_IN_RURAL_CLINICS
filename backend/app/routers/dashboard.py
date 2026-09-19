@@ -99,6 +99,19 @@ def get_doctor_dashboard(
         if p:
             v = db.villages.find_one({"_id": ObjectId(p.get("village_id"))}) if p.get("village_id") else None
             v_name = v["name"] if v else "Unknown"
+
+            predicted_at = pred.get("predicted_at") or pred.get("created_at")
+            if not predicted_at and "_id" in pred:
+                try:
+                    if isinstance(pred["_id"], ObjectId):
+                        predicted_at = pred["_id"].generation_time.isoformat()
+                    elif ObjectId.is_valid(str(pred["_id"])):
+                        predicted_at = ObjectId(str(pred["_id"])).generation_time.isoformat()
+                except Exception:
+                    pass
+            if not predicted_at:
+                predicted_at = datetime.datetime.utcnow().isoformat()
+
             formatted_high_risk.append({
                 "patient_id": str(p["_id"]),
                 "patient_code": p.get("patient_code"),
@@ -107,7 +120,7 @@ def get_doctor_dashboard(
                 "disease": pred.get("disease"),
                 "probability": float(pred.get("probability", 0)),
                 "risk_level": pred.get("risk_level"),
-                "predicted_at": pred.get("predicted_at"),
+                "predicted_at": predicted_at,
                 "prediction_id": str(pred["_id"])
             })
 

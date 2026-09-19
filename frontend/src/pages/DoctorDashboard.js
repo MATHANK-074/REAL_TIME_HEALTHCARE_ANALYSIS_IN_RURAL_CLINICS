@@ -196,7 +196,7 @@ const DoctorDashboard = ({ user }) => {
                       <td>
                         <strong style={{ color: 'var(--danger)' }}>{Math.round(hp.probability * 100)}%</strong>
                       </td>
-                      <td>{new Date(hp.predicted_at).toLocaleDateString()}</td>
+                      <td>{hp.predicted_at ? new Date(hp.predicted_at).toLocaleDateString() : 'N/A'}</td>
                       <td>
                         <button className="btn btn-secondary btn-sm" style={{ padding: '6px 12px' }}>
                           Manage <ArrowRight size={14} />

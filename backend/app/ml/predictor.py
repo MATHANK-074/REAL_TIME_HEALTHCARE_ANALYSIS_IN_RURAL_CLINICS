@@ -1,5 +1,6 @@
 import json
 import os
+import datetime
 from pymongo.database import Database
 from decimal import Decimal
 
@@ -111,14 +112,15 @@ def predict_risk(
         model_version = pipeline['version']
 
     db_prediction_dict = {
-        "patient_id": patient.id,
-        "health_record_id": health_record.id,
+        "patient_id": patient.id if hasattr(patient, 'id') else str(patient.get("_id", patient.get("id"))),
+        "health_record_id": health_record.id if hasattr(health_record, 'id') else str(health_record.get("_id", health_record.get("id"))),
         "model_name": model_name_upper,
         "disease": disease_display,
         "probability": str(probability),
         "risk_level": risk_level,
         "prediction_result": prediction_result,
-        "model_version": model_version
+        "model_version": model_version,
+        "predicted_at": datetime.datetime.utcnow().isoformat()
     }
     
     result = db.predictions.insert_one(db_prediction_dict)
@@ -209,6 +211,7 @@ def _create_unavailable_prediction(db, health_record, patient, model_name, reaso
         "risk_level": "UNAVAILABLE",
         "prediction_result": f"Assessment unavailable — {reason}",
         "model_version": "1.0.0",
+        "predicted_at": datetime.datetime.utcnow().isoformat()
     }
 
     result = db.predictions.insert_one(db_prediction_dict)
