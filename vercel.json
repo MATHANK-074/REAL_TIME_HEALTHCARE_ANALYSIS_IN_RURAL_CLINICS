@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "framework": "create-react-app",
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/build",
   "rewrites": [
     {
       "source": "/api/:path*",
