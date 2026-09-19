@@ -4,7 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import traceback
 
-from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push
+try:
+    from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push
+except (ImportError, ValueError):
+    import sys
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from app.routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push
+
 app = FastAPI(
     title="RuralCare AI - Healthcare Risk Prediction API",
     description="Backend API for AI-Powered Rural Healthcare Analytics and Risk Prediction",
