@@ -36,6 +36,7 @@ const DoctorDashboard = ({ user }) => {
       setData(res);
       setReviewQueue(queueData);
       setFollowups(fuData);
+      setError('');
     } catch (e) {
       setError('Failed to fetch dashboard metrics: ' + (e.message || e));
     } finally {
@@ -65,9 +66,21 @@ const DoctorDashboard = ({ user }) => {
 
   if (error || !data) {
     return (
-      <div className="main-content" style={{ padding: '20px' }}>
-        <div className="badge badge-danger" style={{ display: 'block', padding: '14px', width: '100%', borderRadius: '12px', textTransform: 'none', textAlign: 'center' }}>
-          {error || 'No dashboard data available.'}
+      <div className="main-content" style={{ padding: '20px', textAlign: 'center' }}>
+        <div className="glass" style={{ padding: '32px', maxWidth: '500px', margin: '40px auto', borderRadius: '16px' }}>
+          <ShieldAlert size={48} color="var(--danger)" style={{ marginBottom: '16px' }} />
+          <h3 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>Connection Issue</h3>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '0.95rem' }}>
+            {error || 'No dashboard data available.'}
+          </p>
+          <button 
+            onClick={() => loadDashboard(false)} 
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            <RefreshCw size={16} />
+            <span>Retry Connecting</span>
+          </button>
         </div>
       </div>
     );

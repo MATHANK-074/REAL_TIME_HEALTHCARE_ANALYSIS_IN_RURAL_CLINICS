@@ -40,7 +40,7 @@ const handleResponse = async (res, defaultErrorMsg) => {
   return res.json();
 };
 
-const fetchWithTimeout = async (url, options = {}, timeoutMs = 20000) => {
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 45000) => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -53,7 +53,10 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 20000) => {
   } catch (error) {
     clearTimeout(id);
     if (error.name === 'AbortError') {
-      throw new Error('Connection timed out. Backend server may be starting up, please try again.');
+      throw new Error('Server response timed out. The backend server may be spinning up; please try again.');
+    }
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error('Unable to reach backend server. Please check your internet connection or server status.');
     }
     throw error;
   }
