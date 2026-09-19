@@ -90,13 +90,24 @@ def get_patient_health_records(
     db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
+    try:
+        patient_obj_id = ObjectId(patient_id)
+    except Exception:
+        patient_obj_id = patient_id
+
+    patient = db.patients.find_one({"_id": patient_obj_id})
+    if not patient:
+        patient = db.patients.find_one({"_id": str(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
     
-    records = list(db.health_records.find({"patient_id": patient_id}).sort("recorded_at", -1))
+    p_id_query = [str(patient_id)]
+    if ObjectId.is_valid(str(patient_id)):
+        p_id_query.append(ObjectId(str(patient_id)))
+
+    records = list(db.health_records.find({"patient_id": {"$in": p_id_query}}).sort("recorded_at", -1))
     return [serialize_doc(r) for r in records]
 
 @router.get("/pending-review", response_model=List[HealthRecordSchema])
@@ -114,6 +125,8 @@ def get_pending_reviews(
         if clinic_id and not subdistrict_id:
             try:
                 c = db.clinics.find_one({"_id": ObjectId(clinic_id)})
+                if not c:
+                    c = db.clinics.find_one({"_id": str(clinic_id)})
                 if c and c.get("subdistrict_id"):
                     subdistrict_id = str(c["subdistrict_id"])
             except Exception:
@@ -121,20 +134,40 @@ def get_pending_reviews(
 
         query_conditions = []
         if clinic_id:
-            query_conditions.append({"clinic_id": str(clinic_id)})
+            c_str = str(clinic_id)
+            c_query = [c_str]
+            if ObjectId.is_valid(c_str):
+                c_query.append(ObjectId(c_str))
+            query_conditions.append({"clinic_id": {"$in": c_query}})
         if subdistrict_id:
-            assigned_villages = list(db.villages.find({"subdistrict_id": str(subdistrict_id)}))
-            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+            sub_str = str(subdistrict_id)
+            sub_query = [sub_str]
+            if ObjectId.is_valid(sub_str):
+                sub_query.append(ObjectId(sub_str))
+            assigned_villages = list(db.villages.find({"subdistrict_id": {"$in": sub_query}}))
+            assigned_village_ids = []
+            for v in assigned_villages:
+                vid_str = str(v["_id"])
+                assigned_village_ids.append(vid_str)
+                if ObjectId.is_valid(vid_str):
+                    assigned_village_ids.append(ObjectId(vid_str))
             if assigned_village_ids:
                 query_conditions.append({"village_id": {"$in": assigned_village_ids}})
+            query_conditions.append({"subdistrict_id": {"$in": sub_query}})
 
         if query_conditions:
             patients = list(db.patients.find({"$or": query_conditions}, {"_id": 1}))
-            p_ids = [str(p["_id"]) for p in patients]
+            p_ids = []
+            for p in patients:
+                pid_str = str(p["_id"])
+                p_ids.append(pid_str)
+                if ObjectId.is_valid(pid_str):
+                    p_ids.append(ObjectId(pid_str))
             filter_query["patient_id"] = {"$in": p_ids}
             
     records = list(db.health_records.find(filter_query).sort("recorded_at", -1))
     return [serialize_doc(r) for r in records]
+
 
 @router.patch("/{record_id}/review", response_model=HealthRecordSchema)
 def review_health_record(

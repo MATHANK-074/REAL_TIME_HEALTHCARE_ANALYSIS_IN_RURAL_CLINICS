@@ -48,19 +48,43 @@ def get_clinical_review_queue(
 
         query_conditions = []
         if clinic_id:
-            query_conditions.append({"clinic_id": str(clinic_id)})
+            c_str = str(clinic_id)
+            c_query = [c_str]
+            if ObjectId.is_valid(c_str):
+                c_query.append(ObjectId(c_str))
+            query_conditions.append({"clinic_id": {"$in": c_query}})
         if subdistrict_id:
-            assigned_villages = list(db.villages.find({"subdistrict_id": str(subdistrict_id)}))
-            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+            sub_str = str(subdistrict_id)
+            sub_query = [sub_str]
+            if ObjectId.is_valid(sub_str):
+                sub_query.append(ObjectId(sub_str))
+            assigned_villages = list(db.villages.find({"subdistrict_id": {"$in": sub_query}}))
+            assigned_village_ids = []
+            for v in assigned_villages:
+                vid_str = str(v["_id"])
+                assigned_village_ids.append(vid_str)
+                if ObjectId.is_valid(vid_str):
+                    assigned_village_ids.append(ObjectId(vid_str))
             if assigned_village_ids:
                 query_conditions.append({"village_id": {"$in": assigned_village_ids}})
+            query_conditions.append({"subdistrict_id": {"$in": sub_query}})
 
         if query_conditions:
             patients = list(db.patients.find({"$or": query_conditions}, {"_id": 1}))
-            p_ids = [str(p["_id"]) for p in patients]
+            p_ids = []
+            for p in patients:
+                pid_str = str(p["_id"])
+                p_ids.append(pid_str)
+                if ObjectId.is_valid(pid_str):
+                    p_ids.append(ObjectId(pid_str))
         else:
             patients = list(db.patients.find({}, {"_id": 1}))
-            p_ids = [str(p["_id"]) for p in patients]
+            p_ids = []
+            for p in patients:
+                pid_str = str(p["_id"])
+                p_ids.append(pid_str)
+                if ObjectId.is_valid(pid_str):
+                    p_ids.append(ObjectId(pid_str))
         
     # 3. Fetch Recommendations
     filter_query = {}
@@ -68,6 +92,7 @@ def get_clinical_review_queue(
         filter_query["patient_id"] = {"$in": p_ids}
         
     recs = list(db.clinical_recommendations.find(filter_query).sort("generated_at", -1))
+
     
     print(f"[DOCTOR_ASSESSMENT_QUERY] doctor_id={current_user.get('id')} clinic_id={current_user.get('clinic_id')} patient_ids_found={len(p_ids)} recs_found={len(recs)}")
     

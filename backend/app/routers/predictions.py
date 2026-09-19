@@ -78,13 +78,26 @@ def get_patient_predictions(
     db: Database = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    patient = db.patients.find_one({"_id": ObjectId(patient_id)})
+    try:
+        patient_obj_id = ObjectId(patient_id)
+    except Exception:
+        patient_obj_id = patient_id
+
+    patient = db.patients.find_one({"_id": patient_obj_id})
+    if not patient:
+        patient = db.patients.find_one({"_id": str(patient_id)})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
-    predictions = list(db.predictions.find({"patient_id": patient_id}).sort("predicted_at", -1))
+    
+    p_id_query = [str(patient_id)]
+    if ObjectId.is_valid(str(patient_id)):
+        p_id_query.append(ObjectId(str(patient_id)))
+
+    predictions = list(db.predictions.find({"patient_id": {"$in": p_id_query}}).sort("predicted_at", -1))
     return [serialize_doc(p) for p in predictions]
+
 
 @router.get("/metrics", status_code=status.HTTP_200_OK)
 def get_model_evaluation_metrics(

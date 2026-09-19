@@ -18,14 +18,27 @@ def get_doctor_dashboard(
 ):
     if current_user.get("role") == 'ADMIN':
         villages = list(db.villages.find({}))
-        village_ids = [str(v["_id"]) for v in villages]
+        village_ids = []
+        for v in villages:
+            vid_str = str(v["_id"])
+            village_ids.append(vid_str)
+            if ObjectId.is_valid(vid_str):
+                village_ids.append(ObjectId(vid_str))
     else:
         if not getattr(current_user, 'subdistrict_id', None) and not current_user.get("subdistrict_id"):
             village_ids = []
         else:
-            subdistrict_id = getattr(current_user, 'subdistrict_id', current_user.get("subdistrict_id"))
-            villages = list(db.villages.find({"subdistrict_id": str(subdistrict_id)}))
-            village_ids = [str(v["_id"]) for v in villages]
+            subdistrict_id = str(getattr(current_user, 'subdistrict_id', current_user.get("subdistrict_id")))
+            sub_query = [subdistrict_id]
+            if ObjectId.is_valid(subdistrict_id):
+                sub_query.append(ObjectId(subdistrict_id))
+            villages = list(db.villages.find({"subdistrict_id": {"$in": sub_query}}))
+            village_ids = []
+            for v in villages:
+                vid_str = str(v["_id"])
+                village_ids.append(vid_str)
+                if ObjectId.is_valid(vid_str):
+                    village_ids.append(ObjectId(vid_str))
 
     if not village_ids:
         return {
@@ -43,7 +56,12 @@ def get_doctor_dashboard(
     total_patients = db.patients.count_documents({"village_id": {"$in": village_ids}})
     
     patients_in_area = list(db.patients.find({"village_id": {"$in": village_ids}}, {"_id": 1}))
-    patient_ids = [str(p["_id"]) for p in patients_in_area]
+    patient_ids = []
+    for p in patients_in_area:
+        pid_str = str(p["_id"])
+        patient_ids.append(pid_str)
+        if ObjectId.is_valid(pid_str):
+            patient_ids.append(ObjectId(pid_str))
 
     pipeline = [
         {"$match": {"patient_id": {"$in": patient_ids}}},
@@ -54,6 +72,7 @@ def get_doctor_dashboard(
         }},
         {"$replaceRoot": {"newRoot": "$latest_prediction"}}
     ]
+
     latest_predictions = list(db.predictions.aggregate(pipeline)) if patient_ids else []
     
     risk_map = {}

@@ -80,9 +80,18 @@ def enforce_patient_area_access(current_user: User, patient: dict, db: Database)
             if user_clinic and patient_clinic and patient_clinic == str(user_clinic):
                 allowed = True
             if not allowed and user_sub and patient_village:
-                assigned_villages = list(db.villages.find({"subdistrict_id": str(user_sub)}))
-                assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
-                if patient_village in assigned_village_ids:
+                sub_str = str(user_sub)
+                sub_query = [sub_str]
+                if ObjectId.is_valid(sub_str):
+                    sub_query.append(ObjectId(sub_str))
+                assigned_villages = list(db.villages.find({"subdistrict_id": {"$in": sub_query}}))
+                assigned_village_ids = []
+                for v in assigned_villages:
+                    vid_str = str(v["_id"])
+                    assigned_village_ids.append(vid_str)
+                    if ObjectId.is_valid(vid_str):
+                        assigned_village_ids.append(ObjectId(vid_str))
+                if patient_village in [str(x) for x in assigned_village_ids]:
                     allowed = True
                     
         if not allowed:
@@ -111,7 +120,11 @@ def get_patients(
         if current_user.get("area_id"):
             filter_query["area_id"] = str(current_user.get("area_id"))
         elif current_user.get("village_id"):
-            filter_query["village_id"] = str(current_user.get("village_id"))
+            v_str = str(current_user.get("village_id"))
+            v_query = [v_str]
+            if ObjectId.is_valid(v_str):
+                v_query.append(ObjectId(v_str))
+            filter_query["village_id"] = {"$in": v_query}
             
     elif current_user.get("role") == 'DOCTOR':
         user_clinic = current_user.get("clinic_id")
@@ -126,15 +139,29 @@ def get_patients(
                 
         or_conditions = []
         if user_clinic:
-            or_conditions.append({"clinic_id": str(user_clinic)})
+            c_str = str(user_clinic)
+            c_query = [c_str]
+            if ObjectId.is_valid(c_str):
+                c_query.append(ObjectId(c_str))
+            or_conditions.append({"clinic_id": {"$in": c_query}})
         if user_sub:
-            assigned_villages = list(db.villages.find({"subdistrict_id": str(user_sub)}))
-            assigned_village_ids = [str(v["_id"]) for v in assigned_villages]
+            sub_str = str(user_sub)
+            sub_query = [sub_str]
+            if ObjectId.is_valid(sub_str):
+                sub_query.append(ObjectId(sub_str))
+            assigned_villages = list(db.villages.find({"subdistrict_id": {"$in": sub_query}}))
+            assigned_village_ids = []
+            for v in assigned_villages:
+                vid_str = str(v["_id"])
+                assigned_village_ids.append(vid_str)
+                if ObjectId.is_valid(vid_str):
+                    assigned_village_ids.append(ObjectId(vid_str))
             if assigned_village_ids:
                 or_conditions.append({"village_id": {"$in": assigned_village_ids}})
                 
         if or_conditions:
             filter_query["$or"] = or_conditions
+
     
     # 2. Apply optional filters
     if village_id:
