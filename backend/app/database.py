@@ -1,7 +1,12 @@
 from pymongo import MongoClient
 from .config import settings
 
-client = MongoClient(settings.DATABASE_URL)
+client = MongoClient(
+    settings.DATABASE_URL,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000
+)
+
 
 def get_db():
     try:

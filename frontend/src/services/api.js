@@ -40,17 +40,39 @@ const handleResponse = async (res, defaultErrorMsg) => {
   return res.json();
 };
 
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 20000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw new Error('Connection timed out. Backend server may be starting up, please try again.');
+    }
+    throw error;
+  }
+};
+
 export const api = {
   // Authentication
   login: async (email, password) => {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
-    });
+    }, 20000);
     // Do not intercept 401 for login specifically so it doesn't redirect loop
     if (!res.ok) {
-      const err = await res.json();
+      let err = {};
+      try {
+        err = await res.json();
+      } catch (e) {}
       let errMsg = 'Failed to login';
       if (err.detail) {
         if (typeof err.detail === 'string') {
@@ -65,6 +87,7 @@ export const api = {
     }
     return res.json();
   },
+
 
   register: async (name, email, password, role, phone, qualification, districtId, subdistrictId, villageId, areaId, clinicId) => {
     const res = await fetch(`${BASE_URL}/auth/register`, {

@@ -1,26 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://ruralcare-backend-8lcv.onrender.com/api/$1"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],
   "env": {
     "CI": "false",
-    "REACT_APP_API_URL": "https://ruralcare-backend-8lcv.onrender.com/api"
+    "REACT_APP_API_URL": "/api"
   }
 }
