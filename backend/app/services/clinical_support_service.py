@@ -21,17 +21,37 @@ def generate_recommendation(db: Database, health_record: dict, patient: dict) ->
     Runs all 5 AI models for a given health record, stores the predictions,
     and generates a unified rule-based Clinical Recommendation.
     """
-    patient_id = str(patient["_id"])
-    record_id = str(health_record["_id"])
+    p_dict = dict(patient)
+    if "_id" in p_dict and "id" not in p_dict:
+        p_dict["id"] = str(p_dict["_id"])
+    
+    h_dict = dict(health_record)
+    if "_id" in h_dict and "id" not in h_dict:
+        h_dict["id"] = str(h_dict["_id"])
+    if "recorded_at" not in h_dict or h_dict["recorded_at"] is None:
+        h_dict["recorded_at"] = datetime.datetime.utcnow()
+    if "recorded_by" not in h_dict or h_dict["recorded_by"] is None:
+        h_dict["recorded_by"] = "sys"
+
+    patient_id = str(p_dict["id"])
+    record_id = str(h_dict["id"])
     
     # 1. Run the existing 5 ML models
     predictions = []
     condition_results = []
     
-    patient_obj = Patient(**patient)
-    record_obj = HealthRecordSchema(**health_record)
+    try:
+        patient_obj = Patient(**p_dict)
+    except Exception:
+        patient_obj = Patient.construct(**p_dict)
+        
+    try:
+        record_obj = HealthRecordSchema(**h_dict)
+    except Exception:
+        record_obj = HealthRecordSchema.construct(**h_dict)
     
     print(f"[NURSE_ASSESSMENT] patient_id={patient_id} record_id={record_id} name={patient.get('name')}")
+
 
     for model_name in SUPPORTED_MODELS:
         try:

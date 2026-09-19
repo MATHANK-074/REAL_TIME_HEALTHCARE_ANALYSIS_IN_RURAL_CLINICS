@@ -130,6 +130,8 @@ const NurseDashboard = ({ user }) => {
   const [vSmoking, setVSmoking] = useState('NEVER');
   const [vSymptoms, setVSymptoms] = useState('');
   const [vNotes, setVNotes] = useState('');
+  const [savingVitals, setSavingVitals] = useState(false);
+  const [vitalsError, setVitalsError] = useState('');
 
   // Load patients list
   const loadPatients = useCallback(async () => {
@@ -233,6 +235,8 @@ const NurseDashboard = ({ user }) => {
   const handleOpenVitals = (patient) => {
     setSelectedPatient(patient);
     setPredictionResults(null);
+    setVitalsError('');
+    setSavingVitals(false);
     setShowVitalsModal(true);
     resetVitals();
   };
@@ -246,36 +250,53 @@ const NurseDashboard = ({ user }) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setVitalsError('');
+    setSavingVitals(true);
     try {
+      const patientId = selectedPatient?.id || selectedPatient?._id;
+      if (!patientId) {
+        throw new Error('Invalid patient selection.');
+      }
+
+      const parseNum = (val, isFloat = false) => {
+        if (val === '' || val === null || val === undefined) return null;
+        const parsed = isFloat ? parseFloat(val) : parseInt(val, 10);
+        return isNaN(parsed) ? null : parsed;
+      };
+
+      const pregVal = parseNum(vPregnancies);
+
       // Log health record
       await api.logVitals({
-        patient_id: selectedPatient.id,
-        weight: vWeight ? parseFloat(vWeight) : null,
-        height: vHeight ? parseFloat(vHeight) : null,
-        systolic_bp: vSystolic ? parseInt(vSystolic) : null,
-        diastolic_bp: vDiastolic ? parseInt(vDiastolic) : null,
-        heart_rate: vHeartRate ? parseInt(vHeartRate) : null,
-        temperature: vTemp ? parseFloat(vTemp) : null,
-        blood_glucose: vGlucose ? parseInt(vGlucose) : null,
-        cholesterol: vCholesterol ? parseInt(vCholesterol) : null,
-        insulin: vInsulin ? parseInt(vInsulin) : null,
-        pregnancies: parseInt(vPregnancies),
-        smoking_status: vSmoking,
-        symptoms: vSymptoms || null,
-        clinical_notes: vNotes || null
+        patient_id: String(patientId),
+        weight: parseNum(vWeight, true),
+        height: parseNum(vHeight, true),
+        systolic_bp: parseNum(vSystolic),
+        diastolic_bp: parseNum(vDiastolic),
+        heart_rate: parseNum(vHeartRate),
+        temperature: parseNum(vTemp, true),
+        blood_glucose: parseNum(vGlucose),
+        cholesterol: parseNum(vCholesterol),
+        insulin: parseNum(vInsulin),
+        pregnancies: pregVal !== null ? pregVal : 0,
+        smoking_status: vSmoking || 'NEVER',
+        symptoms: vSymptoms ? vSymptoms.trim() : null,
+        clinical_notes: vNotes ? vNotes.trim() : null
       });
       
       setSuccess('Health record vitals logged successfully!');
-      
-      // Removed automatic AI prediction trigger as per Phase 1 strategy
       setShowVitalsModal(false);
       resetVitals();
-      
       loadPatients();
     } catch (err) {
-      setError(err.message || 'Failed to log health vitals.');
+      const msg = err.message || 'Failed to log health vitals.';
+      setVitalsError(msg);
+      setError(msg);
+    } finally {
+      setSavingVitals(false);
     }
   };
+
 
   const handleCompleteFollowup = async (id) => {
     try {
@@ -612,6 +633,11 @@ const NurseDashboard = ({ user }) => {
               
               {/* Form Side */}
               <div>
+                {vitalsError && (
+                  <div className="alert alert-danger" style={{ marginBottom: '15px', padding: '10px 15px', borderRadius: '8px', fontSize: '0.9rem' }}>
+                    {vitalsError}
+                  </div>
+                )}
                 <form onSubmit={handleLogVitals}>
                   <div className="form-row">
                     {renderVitalInput("Weight (kg)", "weight", vWeight, setVWeight, "number", "0.1", true)}
@@ -662,11 +688,17 @@ const NurseDashboard = ({ user }) => {
                     <textarea className="form-control" rows="2" placeholder="Additional observations..." value={vNotes} onChange={(e) => setVNotes(e.target.value)} />
                   </div>
 
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '15px' }}>
-                    Save Health Record
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary" 
+                    disabled={savingVitals}
+                    style={{ width: '100%', padding: '12px', marginTop: '15px', fontWeight: 600 }}
+                  >
+                    {savingVitals ? 'Saving Health Record...' : 'Save Health Record'}
                   </button>
                 </form>
               </div>
+
 
             </div>
           </div>

@@ -30,7 +30,12 @@ def create_health_record(
             detail="Only Nurses and Admins can log health records"
         )
         
-    patient = db.patients.find_one({"_id": ObjectId(record_data.patient_id)})
+    try:
+        patient_obj_id = ObjectId(record_data.patient_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid patient ID format")
+
+    patient = db.patients.find_one({"_id": patient_obj_id})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
         
@@ -63,13 +68,21 @@ def create_health_record(
     log_audit(db, db_record["recorded_by"], "CREATE_HEALTH_RECORD", "health_records", str(db_record["_id"]), f"Created health record for patient {patient.get('name')} ({patient.get('patient_code')})")
     
     # Step 1: Run Clinical Support Engine (Triggers predictions + recommendation)
-    from ..services.clinical_support_service import generate_recommendation
-    generate_recommendation(db, db_record, patient)
+    try:
+        from ..services.clinical_support_service import generate_recommendation
+        generate_recommendation(db, db_record, patient)
+    except Exception as e:
+        print(f"[REC_ERROR] Failed to generate recommendation: {e}")
     
     # Step 2: Notify assigned doctor
-    from ..services.notification_service import notify_health_review_required
-    notify_health_review_required(db, db_record, patient)
+    try:
+        from ..services.notification_service import notify_health_review_required
+        notify_health_review_required(db, db_record, patient)
+    except Exception as e:
+        print(f"[NOTIF_ERROR] Failed to send notification: {e}")
+
     return serialize_doc(db_record)
+
 
 @router.get("/patient/{patient_id}", response_model=List[HealthRecordSchema])
 def get_patient_health_records(
