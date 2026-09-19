@@ -1,2 +1,2 @@
 [tool.vercel]
-entrypoint = "api/index.py"
+entrypoint = "main.py"
