@@ -1,20 +1,15 @@
 {
   "version": 2,
-  "framework": "create-react-app",
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/build",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://ruralcare-backend-8lcv.onrender.com/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://ruralcare-backend-8lcv.onrender.com/api/$1"
     },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ],
-  "env": {
-    "CI": "false",
-    "REACT_APP_API_URL": "https://ruralcare-backend-8lcv.onrender.com/api"
-  }
+  ]
 }
