@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
-import { MapPin, Navigation, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle, AlertTriangle } from 'lucide-react';
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyCqlExf1BkdOn5QMmnraDl-DurE6jFeL1k";
 

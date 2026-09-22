@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { api } from './services/api';
 
 // Components
 import Sidebar from './components/Sidebar';
-import Header from './components/Header';
 
 // Pages
 import Login from './pages/Login';
@@ -26,7 +24,6 @@ import PatientProfile from './pages/PatientProfile';
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [currentTitle, setCurrentTitle] = useState('Overview');
 
   useEffect(() => {
     // Check if user is logged in on load
