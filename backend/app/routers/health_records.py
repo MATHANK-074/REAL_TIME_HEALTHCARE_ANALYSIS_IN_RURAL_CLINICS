@@ -55,6 +55,23 @@ def create_health_record(
     if db_record.get("height") is not None: db_record["height"] = float(db_record["height"])
     if db_record.get("temperature") is not None: db_record["temperature"] = float(db_record["temperature"])
     db_record["bmi"] = float(bmi) if bmi else None
+    
+    # Parse blood_pressure into systolic and diastolic for ML models
+    bp = db_record.get("blood_pressure")
+    if bp and "/" in bp:
+        try:
+            sys_val, dia_val = bp.split("/")
+            db_record["systolic_bp"] = int(sys_val.strip())
+            db_record["diastolic_bp"] = int(dia_val.strip())
+        except Exception:
+            pass
+            
+    # Map blood sugar to blood_glucose for ML models
+    if db_record.get("blood_sugar_fasting"):
+        db_record["blood_glucose"] = int(float(db_record["blood_sugar_fasting"]))
+    elif db_record.get("blood_sugar_random"):
+        db_record["blood_glucose"] = int(float(db_record["blood_sugar_random"]))
+
     db_record["recorded_by"] = str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys"))
     db_record["recorded_at"] = datetime.datetime.utcnow()
     db_record["review_status"] = "PENDING_REVIEW"

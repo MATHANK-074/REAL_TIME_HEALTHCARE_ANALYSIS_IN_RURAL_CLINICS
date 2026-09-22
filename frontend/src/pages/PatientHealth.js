@@ -48,19 +48,19 @@ const PatientHealth = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginBottom: '25px' }}>
               <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Blood Pressure</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.blood_pressure_systolic}/{record.blood_pressure_diastolic} <small style={{fontWeight:400, color:'#94a3b8'}}>mmHg</small></span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.systolic_bp || record.blood_pressure_systolic || '--'}/{record.diastolic_bp || record.blood_pressure_diastolic || '--'} <small style={{fontWeight:400, color:'#94a3b8'}}>mmHg</small></span>
               </div>
               <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Pulse</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.heart_rate} <small style={{fontWeight:400, color:'#94a3b8'}}>bpm</small></span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.heart_rate || '--'} <small style={{fontWeight:400, color:'#94a3b8'}}>bpm</small></span>
               </div>
               <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Weight</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.weight} <small style={{fontWeight:400, color:'#94a3b8'}}>kg</small></span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.weight || '--'} <small style={{fontWeight:400, color:'#94a3b8'}}>kg</small></span>
               </div>
               <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                 <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>Blood Sugar</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.blood_sugar || 'N/A'} <small style={{fontWeight:400, color:'#94a3b8'}}></small></span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{record.blood_glucose || record.blood_sugar_fasting || record.blood_sugar_random || 'N/A'} <small style={{fontWeight:400, color:'#94a3b8'}}></small></span>
               </div>
             </div>
 
@@ -78,6 +78,23 @@ const PatientHealth = () => {
                 <span style={{ color: '#64748b' }}>No specific symptoms recorded.</span>
               )}
             </div>
+
+            {record.review_status && record.review_status !== 'PENDING_REVIEW' && (
+              <div style={{ marginTop: '25px', padding: '20px', borderRadius: '8px', border: `2px solid ${record.review_status === 'APPROVE' ? '#22c55e' : '#3b82f6'}` }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '10px', color: '#1e293b' }}>Doctor's Clinical Assessment</h3>
+                <div style={{ marginBottom: '15px' }}>
+                  <span className={`badge ${record.review_status === 'APPROVE' ? 'badge-success' : record.review_status === 'DISMISS' ? 'badge-secondary' : 'badge-primary'}`}>
+                    {record.review_status}
+                  </span>
+                </div>
+                {record.doctor_notes && (
+                  <div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '6px', color: '#334155', fontSize: '0.95rem' }}>
+                    <strong>Clinical Notes:</strong> <br/>
+                    {record.doctor_notes}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

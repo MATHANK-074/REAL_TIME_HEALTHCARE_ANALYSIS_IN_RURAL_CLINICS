@@ -204,7 +204,7 @@ const NurseDashboard = ({ user }) => {
     setSuccess('');
     try {
       // Area and Clinic are automatically assigned on backend from current user's profile
-      await api.createPatient({
+      const newPatient = await api.createPatient({
         name: regName,
         age: parseInt(regAge),
         gender: regGender,
@@ -216,7 +216,11 @@ const NurseDashboard = ({ user }) => {
         allergies: regAllergies || null,
         village_id: user.role === 'ADMIN' ? regVillageId : user.village_id
       });
-      setSuccess('Patient registered successfully!');
+      
+      const pEmail = `${newPatient.patient_code.toLowerCase()}@ruralcare.com`;
+      const pPass = regPhone || 'password123';
+      
+      setSuccess(`Patient registered successfully! Login: ${pEmail} | Password: ${pPass}`);
       setShowRegModal(false);
       loadPatients();
       

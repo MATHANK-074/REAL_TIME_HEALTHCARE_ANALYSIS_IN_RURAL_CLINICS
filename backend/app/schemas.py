@@ -7,9 +7,10 @@ from decimal import Decimal
 class MongoBaseModel(BaseModel):
     id: Optional[str] = None
 
-    class Config:
-        orm_mode = True
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+        "protected_namespaces": ()
+    }
 
 
 # Location Schemas
@@ -167,7 +168,11 @@ class HealthRecordBase(BaseModel):
     diastolic_bp: Optional[int] = None
     heart_rate: Optional[int] = None
     temperature: Optional[Decimal] = None
+    spo2: Optional[int] = None
+    respiratory_rate: Optional[int] = None
     blood_glucose: Optional[int] = None
+    blood_sugar_fasting: Optional[Decimal] = None
+    blood_sugar_random: Optional[Decimal] = None
     cholesterol: Optional[int] = None
     insulin: Optional[int] = None
     pregnancies: Optional[int] = 0
@@ -213,6 +218,10 @@ class PredictionBase(BaseModel):
     prediction_result: Optional[str] = None
     model_version: str
 
+    model_config = {
+        "protected_namespaces": ()
+    }
+
 class PredictionCreate(PredictionBase):
     pass
 
@@ -239,6 +248,8 @@ class Alert(AlertBase, MongoBaseModel):
 # Followup Schemas
 class FollowupBase(BaseModel):
     patient_id: str
+    patient_name: Optional[str] = None
+    patient_code: Optional[str] = None
     followup_date: date
     notes: Optional[str] = None
     status: Optional[str] = 'PENDING'

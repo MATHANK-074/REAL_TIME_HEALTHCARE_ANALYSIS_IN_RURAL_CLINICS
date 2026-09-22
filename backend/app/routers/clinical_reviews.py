@@ -86,14 +86,22 @@ def get_clinical_review_queue(
                 if ObjectId.is_valid(pid_str):
                     p_ids.append(ObjectId(pid_str))
         
-    # 3. Fetch Recommendations
-    filter_query = {}
+    # 3. Fetch Latest Recommendation per Patient
+    pipeline = []
     if current_user.get("role") == 'DOCTOR':
-        filter_query["patient_id"] = {"$in": p_ids}
+        pipeline.append({"$match": {"patient_id": {"$in": p_ids}}})
         
-    recs = list(db.clinical_recommendations.find(filter_query).sort("generated_at", -1))
-
+    pipeline.extend([
+        {"$sort": {"generated_at": -1, "created_at": -1, "_id": -1}},
+        {"$group": {
+            "_id": "$patient_id",
+            "latest_rec": {"$first": "$$ROOT"}
+        }},
+        {"$replaceRoot": {"newRoot": "$latest_rec"}}
+    ])
     
+    recs = list(db.clinical_recommendations.aggregate(pipeline))
+
     print(f"[DOCTOR_ASSESSMENT_QUERY] doctor_id={current_user.get('id')} clinic_id={current_user.get('clinic_id')} patient_ids_found={len(p_ids)} recs_found={len(recs)}")
     
     # 4. Enrich and Sort Queue

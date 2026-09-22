@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import { ArrowLeft, PlusCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, PlusCircle, AlertTriangle, Check } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const PatientDetails = () => {
@@ -461,6 +461,32 @@ const PatientDetails = () => {
               >
                 Submit Review
               </button>
+            </div>
+          )}
+          
+          {/* COMPLETED DOCTOR REVIEW SECTION */}
+          {records.length > 0 && records[0].review_status && records[0].review_status !== 'PENDING_REVIEW' && (
+            <div className="glass" style={{ padding: '24px', border: `2px solid var(--${records[0].review_status === 'APPROVE' ? 'success' : 'primary'})` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                <Check color={`var(--${records[0].review_status === 'APPROVE' ? 'success' : 'primary'})`} size={24} />
+                <h3 className="chart-title" style={{ margin: 0 }}>Doctor's Clinical Assessment</h3>
+              </div>
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '15px' }}>
+                Status updated on {records[0].reviewed_at ? new Date(records[0].reviewed_at).toLocaleString() : 'Recently'}
+              </p>
+              
+              <div style={{ marginBottom: '15px' }}>
+                <span className={`badge ${records[0].review_status === 'APPROVE' ? 'badge-success' : records[0].review_status === 'DISMISS' ? 'badge-secondary' : 'badge-primary'}`}>
+                  {records[0].review_status}
+                </span>
+              </div>
+              
+              {records[0].doctor_notes && (
+                <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                  <strong style={{ display: 'block', marginBottom: '8px' }}>Doctor's Clinical Notes:</strong>
+                  {records[0].doctor_notes}
+                </div>
+              )}
             </div>
           )}
 

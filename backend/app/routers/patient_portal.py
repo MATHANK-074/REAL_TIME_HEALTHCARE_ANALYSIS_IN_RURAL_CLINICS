@@ -154,12 +154,16 @@ def get_patient_profile(current_user: dict = Depends(require_role(["PATIENT"])),
         c = db.clinics.find_one({"_id": ObjectId(patient["clinic_id"])})
         if c: profile["clinic_name"] = c.get("clinic_name")
             
-    if patient.get("doctor_id"):
-        d = db.users.find_one({"_id": ObjectId(patient["doctor_id"])})
-        if d: profile["doctor_name"] = d.get("name")
-            
-    if patient.get("nurse_id"):
-        n = db.users.find_one({"_id": ObjectId(patient["nurse_id"])})
-        if n: profile["nurse_name"] = n.get("name")
+    nurse_query = {"role": "NURSE"}
+    if patient.get("area_id"): nurse_query["area_id"] = str(patient["area_id"])
+    elif patient.get("village_id"): nurse_query["village_id"] = str(patient["village_id"])
+    nurses = list(db.users.find(nurse_query))
+    if nurses: profile["nurse_name"] = ", ".join([n.get("name") for n in nurses])
+        
+    doctor_query = {"role": "DOCTOR"}
+    if patient.get("clinic_id"): doctor_query["clinic_id"] = str(patient["clinic_id"])
+    elif v and v.get("subdistrict_id"): doctor_query["subdistrict_id"] = str(v.get("subdistrict_id"))
+    doctors = list(db.users.find(doctor_query))
+    if doctors: profile["doctor_name"] = ", ".join([d.get("name") for d in doctors])
 
     return profile

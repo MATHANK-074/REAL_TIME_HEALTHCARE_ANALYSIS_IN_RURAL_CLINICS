@@ -107,7 +107,20 @@ def get_followups(
         filter_query["priority"] = priority.upper()
         
     followups = list(db.followups.find(filter_query).sort("followup_date", 1))
-    return [serialize_doc(f) for f in followups]
+    
+    enriched_followups = []
+    for f in followups:
+        f_serialized = serialize_doc(f)
+        try:
+            p = db.patients.find_one({"_id": ObjectId(f_serialized["patient_id"])})
+            if p:
+                f_serialized["patient_code"] = p.get("patient_code")
+                f_serialized["patient_name"] = p.get("name")
+        except Exception:
+            pass
+        enriched_followups.append(f_serialized)
+        
+    return enriched_followups
 
 @router.put("/{followup_id}", response_model=FollowupSchema)
 def update_followup(

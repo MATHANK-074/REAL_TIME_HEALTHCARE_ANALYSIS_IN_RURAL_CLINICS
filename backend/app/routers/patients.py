@@ -327,6 +327,38 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
     
     log_audit(db, str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), "CREATE_PATIENT", "patients", str(db_patient["_id"]), f"Registered patient {db_patient['name']} ({patient_code})")
     
+    # Enrich with Location and Assigned Staff before returning
+    v = db.villages.find_one({"_id": ObjectId(db_patient["village_id"])}) if db_patient.get("village_id") else None
+    if v:
+        db_patient["village"] = v.get("name")
+        if v.get("subdistrict_id"):
+            sub = db.subdistricts.find_one({"_id": ObjectId(v["subdistrict_id"])})
+            if sub:
+                db_patient["subdistrict"] = sub.get("name")
+                if sub.get("district_id"):
+                    dist = db.districts.find_one({"_id": ObjectId(sub["district_id"])})
+                    if dist: db_patient["district"] = dist.get("name")
+    
+    if db_patient.get("area_id"):
+        a = db.areas.find_one({"_id": ObjectId(db_patient["area_id"])})
+        if a: db_patient["area_name"] = a.get("name")
+        
+    if db_patient.get("clinic_id"):
+        c = db.clinics.find_one({"_id": ObjectId(db_patient["clinic_id"])})
+        if c: db_patient["clinic_name"] = c.get("clinic_name")
+        
+    nurse_query = {"role": "NURSE"}
+    if db_patient.get("area_id"): nurse_query["area_id"] = str(db_patient["area_id"])
+    elif db_patient.get("village_id"): nurse_query["village_id"] = str(db_patient["village_id"])
+    nurses = list(db.users.find(nurse_query))
+    if nurses: db_patient["assigned_nurse"] = ", ".join([n.get("name") for n in nurses])
+        
+    doctor_query = {"role": "DOCTOR"}
+    if db_patient.get("clinic_id"): doctor_query["clinic_id"] = str(db_patient["clinic_id"])
+    elif v and v.get("subdistrict_id"): doctor_query["subdistrict_id"] = str(v.get("subdistrict_id"))
+    doctors = list(db.users.find(doctor_query))
+    if doctors: db_patient["assigned_doctor"] = ", ".join([d.get("name") for d in doctors])
+    
     return serialize_doc(db_patient)
 
 @router.put("/{patient_id}", response_model=PatientSchema)

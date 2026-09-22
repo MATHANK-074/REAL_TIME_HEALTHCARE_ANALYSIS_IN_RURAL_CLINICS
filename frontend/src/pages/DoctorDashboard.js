@@ -325,7 +325,7 @@ const DoctorDashboard = ({ user }) => {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Patient ID</th>
+                  <th>Patient</th>
                   <th>Priority</th>
                   <th>Status</th>
                   <th>Action</th>
@@ -342,7 +342,10 @@ const DoctorDashboard = ({ user }) => {
                   followups.map((fu) => (
                     <tr key={fu.id}>
                       <td>{new Date(fu.followup_date).toLocaleDateString()}</td>
-                      <td>{fu.patient_id}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{fu.patient_name || fu.patient_id}</div>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{fu.patient_code || 'Unknown ID'}</span>
+                      </td>
                       <td>
                         <span className={`badge ${fu.priority === 'HIGH' || fu.priority === 'URGENT' ? 'badge-danger' : 'badge-primary'}`}>
                           {fu.priority || 'MEDIUM'}

@@ -51,7 +51,7 @@ export const subscribeUserToPush = async () => {
   let publicKey = VAPID_PUBLIC_KEY;
   if (!publicKey) {
     try {
-      const res = await api.get('/push/public-key');
+      const res = await api.getVapidPublicKey();
       publicKey = res.public_key;
     } catch (err) {
       throw new Error('Could not retrieve VAPID public key.');
@@ -63,10 +63,18 @@ export const subscribeUserToPush = async () => {
     applicationServerKey: urlBase64ToUint8Array(publicKey)
   };
 
-  const pushSubscription = await registration.pushManager.subscribe(subscribeOptions);
+  let pushSubscription;
+  try {
+    pushSubscription = await registration.pushManager.subscribe(subscribeOptions);
+  } catch (err) {
+    if (err.message.includes('push service error') || err.message.includes('Registration failed')) {
+      throw new Error('Your browser failed to connect to the push service. This can happen in Incognito mode, or if push services are disabled in your browser settings (e.g., Brave).');
+    }
+    throw err;
+  }
 
   // Send to backend
-  await api.post('/push/subscribe', pushSubscription.toJSON());
+  await api.subscribeToPush(pushSubscription.toJSON());
   
   return pushSubscription;
 };
@@ -79,7 +87,7 @@ export const unsubscribeUserFromPush = async () => {
   
   if (pushSubscription) {
     await pushSubscription.unsubscribe();
-    await api.delete('/push/unsubscribe', { data: pushSubscription.toJSON() });
+    await api.unsubscribeFromPush(pushSubscription.toJSON());
   }
 };
 
