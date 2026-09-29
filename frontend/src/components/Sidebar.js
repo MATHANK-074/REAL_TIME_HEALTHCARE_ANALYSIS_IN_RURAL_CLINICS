@@ -25,9 +25,7 @@ const Sidebar = ({ user, onLogout }) => {
       links.push(
         { path: '/admin', label: 'Admin Dashboard', icon: ShieldAlert },
         { path: '/admin/locations', label: 'Territories', icon: MapPin },
-        { path: '/admin/users', label: 'Staff Management', icon: Users },
-        { path: '/doctor', label: 'Doctor View', icon: LayoutDashboard },
-        { path: '/nurse', label: 'Nurse View', icon: Activity }
+        { path: '/admin/users', label: 'Staff Management', icon: Users }
       );
     } else if (user.role === 'DOCTOR') {
       links.push(
