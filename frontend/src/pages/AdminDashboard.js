@@ -6,13 +6,7 @@ import {
   UserCheck, 
   Clock, 
   ShieldAlert, 
-  TrendingUp, 
-  Play,
-  Pause,
-  RefreshCw,
-  Wifi,
-  ShieldCheck,
-  Activity
+  TrendingUp 
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
@@ -21,40 +15,12 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Real-time Field Telemetry States (100% Real Clinical Data)
-  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
-  const [liveFeed, setLiveFeed] = useState([]);
-  const [refreshingFeed, setRefreshingFeed] = useState(false);
-  const [telemetryStats, setTelemetryStats] = useState({
-    server_latency_ms: 14,
-    ingestion_rate_spm: 0,
-    offline_queue: 0
-  });
-
-  const loadScreenings = async () => {
-    try {
-      setRefreshingFeed(true);
-      const res = await api.getRecentScreenings();
-      if (res && res.status === 'success') {
-        setLiveFeed(res.screenings || []);
-        if (res.telemetry) {
-          setTelemetryStats(res.telemetry);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load recent field screenings:', e);
-    } finally {
-      setRefreshingFeed(false);
-    }
-  };
-
   const loadDashboard = async () => {
     try {
       setLoading(true);
       setError('');
       const res = await api.getAdminDashboard();
       setData(res);
-      await loadScreenings();
     } catch (e) {
       console.error('Failed to load admin dashboard:', e);
       setError(e.message || 'Failed to fetch administrator metrics.');
@@ -66,33 +32,6 @@ const AdminDashboard = () => {
   useEffect(() => {
     loadDashboard();
   }, []);
-
-  // Periodic Auto-Sync for Real-Time Field Updates (every 15 seconds)
-  useEffect(() => {
-    let interval = null;
-    if (isAutoSyncing) {
-      interval = setInterval(async () => {
-        try {
-          const res = await api.getRecentScreenings();
-          if (res && res.status === 'success') {
-            setLiveFeed(res.screenings || []);
-            if (res.telemetry) {
-              setTelemetryStats(res.telemetry);
-            }
-          }
-        } catch (e) {
-          console.error("Live auto-sync error:", e);
-        }
-      }, 15000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isAutoSyncing]);
-
-  const toggleAutoSync = () => {
-    setIsAutoSyncing(!isAutoSyncing);
-  };
 
   if (loading) {
     return (
@@ -192,155 +131,6 @@ const AdminDashboard = () => {
             </div>
           </div>
           <div className="kpi-val" style={{ color: 'var(--danger)' }}>{kpis.high_risk_patients}</div>
-        </div>
-      </div>
-
-      {/* Real-time Telemetry Control and System Health */}
-      <div className="dashboard-row" style={{ gridTemplateColumns: '2fr 1fr' }}>
-        {/* Live Telemetry Feed */}
-        <div className="glass" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div>
-              <h3 className="chart-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ 
-                  display: 'inline-block', 
-                  width: '10px', 
-                  height: '10px', 
-                  borderRadius: '50%', 
-                  background: isAutoSyncing ? 'var(--success)' : 'var(--text-muted)', 
-                  boxShadow: isAutoSyncing ? '0 0 10px var(--success)' : 'none', 
-                  animation: isAutoSyncing ? 'pulse 2s infinite' : 'none' 
-                }}></span>
-                Live Field Screening Ingestion Feed
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '2px' }}>
-                Real-time screening telemetry received from remote villages
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
-                onClick={toggleAutoSync} 
-                className={`btn ${isAutoSyncing ? 'btn-danger' : 'btn-primary'}`}
-                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                title="Automatically check for new real field screenings every 15s"
-              >
-                {isAutoSyncing ? <Pause size={14} /> : <Play size={14} />}
-                <span>{isAutoSyncing ? 'Pause Auto-Sync' : 'Auto-Sync (15s)'}</span>
-              </button>
-              <button 
-                onClick={loadScreenings} 
-                className="btn btn-secondary"
-                disabled={refreshingFeed}
-                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                title="Fetch newest real patient records from clinics"
-              >
-                <RefreshCw size={14} className={refreshingFeed ? 'spin' : ''} />
-                <span>Refresh Feed</span>
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
-            {liveFeed.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                No recent field screenings logged yet. Real clinical records entered by nurses will appear here.
-              </div>
-            ) : (
-              liveFeed.map((feed, index) => (
-                <div 
-                  key={feed.prediction.id || index} 
-                  className={`glass-interactive alert-item ${feed.prediction.risk_level === 'HIGH' ? 'alert-item-unread' : ''}`}
-                  style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    padding: '14px 18px', 
-                    borderRadius: '12px',
-                    border: '1px solid var(--border-card)',
-                    background: feed.prediction.risk_level === 'HIGH' ? 'rgba(239, 68, 68, 0.08)' : feed.prediction.risk_level === 'MEDIUM' ? 'rgba(245, 158, 11, 0.05)' : '#f8fafc',
-                    animation: index === 0 ? 'slideDown 0.3s ease-out' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-                    <div style={{ 
-                      width: '8px', 
-                      height: '8px', 
-                      borderRadius: '50%', 
-                      background: feed.prediction.risk_level === 'HIGH' ? 'var(--danger)' : feed.prediction.risk_level === 'MEDIUM' ? 'var(--warning)' : 'var(--success)'
-                    }}></div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 600 }}>{feed.patient.name}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>[{feed.patient.patient_code}]</span>
-                        <span className={`badge ${feed.prediction.risk_level === 'HIGH' ? 'badge-danger' : feed.prediction.risk_level === 'MEDIUM' ? 'badge-warning' : 'badge-success'}`}>
-                          {feed.prediction.risk_level} RISK
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        Screened at <strong>{feed.patient.village} ({feed.patient.subdistrict})</strong> • {feed.prediction.disease}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Vitals: BP {feed.health_record.blood_pressure} • BS {feed.health_record.blood_glucose} mg/dL • BMI {feed.health_record.bmi && !isNaN(feed.health_record.bmi) ? Number(feed.health_record.bmi).toFixed(1) : feed.health_record.bmi}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ textTransform: 'none', textAlign: 'right' }}>
-                    <div style={{ fontWeight: 600, color: feed.prediction.risk_level === 'HIGH' ? 'var(--danger)' : 'var(--text-primary)' }}>
-                      {Math.round(feed.prediction.probability * 100)}% Prob
-                    </div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {new Date(feed.prediction.predicted_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Telemetry Stats */}
-        <div className="glass" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-          <h3 className="chart-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Activity size={18} style={{ color: 'var(--primary)' }} />
-            System Health & Latency
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, justifyContent: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>MODEL INFERENCE TIME</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>{telemetryStats.server_latency_ms} ms</div>
-              </div>
-              <Wifi size={20} style={{ color: 'var(--primary)', opacity: 0.8 }} />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>INGESTION RATE</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--secondary)', marginTop: '2px' }}>{telemetryStats.ingestion_rate_spm} SPM</div>
-              </div>
-              <TrendingUp size={20} style={{ color: 'var(--secondary)', opacity: 0.8 }} />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>VILLAGE NODE SYNC</div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--success)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="live-pulse" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)', animation: 'pulse 2s infinite' }}></span>
-                  Connected (100%)
-                </div>
-              </div>
-              <ShieldCheck size={20} style={{ color: 'var(--success)', opacity: 0.8 }} />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--border-card)' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>OFFLINE SYNC QUEUE</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>{telemetryStats.offline_queue} pending</div>
-              </div>
-              <Clock size={20} style={{ color: 'var(--text-secondary)', opacity: 0.8 }} />
-            </div>
-          </div>
         </div>
       </div>
 
