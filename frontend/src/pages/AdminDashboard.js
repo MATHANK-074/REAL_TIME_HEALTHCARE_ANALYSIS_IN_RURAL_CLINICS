@@ -207,9 +207,9 @@ const AdminDashboard = () => {
                   width: '10px', 
                   height: '10px', 
                   borderRadius: '50%', 
-                  background: isSimulating ? 'var(--success)' : 'var(--text-muted)', 
-                  boxShadow: isSimulating ? '0 0 10px var(--success)' : 'none', 
-                  animation: isSimulating ? 'pulse 2s infinite' : 'none' 
+                  background: isAutoSyncing ? 'var(--success)' : 'var(--text-muted)', 
+                  boxShadow: isAutoSyncing ? '0 0 10px var(--success)' : 'none', 
+                  animation: isAutoSyncing ? 'pulse 2s infinite' : 'none' 
                 }}></span>
                 Live Field Screening Ingestion Feed
               </h3>
