@@ -118,7 +118,7 @@ export const api = {
   },
 
   getPatient: async (id) => {
-    const res = await fetch(`${BASE_URL}/patients/${id}`, { headers: getHeaders() });
+    const res = await fetchWithTimeout(`${BASE_URL}/patients/${id}`, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch patient details');
   },
 
@@ -142,7 +142,7 @@ export const api = {
   },
 
   getPatientRecords: async (patientId) => {
-    const res = await fetch(`${BASE_URL}/health-records/patient/${patientId}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/health-records/patient/${patientId}`, {
       headers: getHeaders(),
     });
     return handleResponse(res, 'Failed to fetch patient health records');
@@ -202,7 +202,7 @@ export const api = {
   },
 
   getPatientPredictions: async (patientId) => {
-    const res = await fetch(`${BASE_URL}/predictions/patient/${patientId}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/predictions/patient/${patientId}`, {
       headers: getHeaders(),
     });
     return handleResponse(res, 'Failed to fetch patient predictions');

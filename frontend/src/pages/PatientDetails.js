@@ -132,12 +132,19 @@ const PatientDetails = () => {
 
   if (error || !patient) {
     return (
-      <div className="main-content" style={{ padding: '20px' }}>
-        <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ marginBottom: '20px' }}>
-          <ArrowLeft size={16} /> Back
-        </button>
-        <div className="badge badge-danger" style={{ display: 'block', padding: '14px', width: '100%', borderRadius: '12px', textTransform: 'none', textAlign: 'center' }}>
-          {error || 'Patient profile not found.'}
+      <div className="main-content" style={{ padding: '24px', maxWidth: '600px', margin: '40px auto', textAlign: 'center' }}>
+        <div className="glass" style={{ padding: '32px 24px', borderRadius: '16px' }}>
+          <div className="badge badge-danger" style={{ display: 'block', padding: '14px', width: '100%', borderRadius: '10px', textTransform: 'none', marginBottom: '20px' }}>
+            {error || 'Unable to load patient profile.'}
+          </div>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <button className="btn btn-secondary" onClick={() => navigate(-1)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button className="btn btn-primary" onClick={loadPatientData} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              Retry Loading
+            </button>
+          </div>
         </div>
       </div>
     );
