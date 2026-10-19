@@ -4,9 +4,8 @@ import {
   Building2, 
   Users, 
   UserCheck, 
-  Clock, 
   ShieldAlert, 
-  TrendingUp 
+  Search
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 
@@ -14,6 +13,8 @@ const AdminDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [villageSearch, setVillageSearch] = useState('');
+  const [selectedTaluk, setSelectedTaluk] = useState('ALL');
 
   const loadDashboard = async () => {
     try {
@@ -59,7 +60,30 @@ const AdminDashboard = () => {
     );
   }
 
-  const { kpis, disease_distribution, high_risk_by_disease, subdistrict_comparison, village_wise_risk, monthly_trend } = data;
+  const { kpis, disease_distribution, high_risk_by_disease, subdistrict_comparison, village_wise_risk = [], monthly_trend } = data;
+
+  const OFFICIAL_TALUKS = [
+    'Anthiyur',
+    'Bhavani',
+    'Erode',
+    'Gobichettipalayam',
+    'Kodumudi',
+    'Modakkurichi',
+    'Nambiyur',
+    'Perundurai',
+    'Sathyamangalam',
+    'Thalavadi'
+  ];
+
+  const filteredVillages = (village_wise_risk || []).filter(vwr => {
+    const matchesSearch = villageSearch.trim() === '' || 
+      (vwr.name && vwr.name.toLowerCase().includes(villageSearch.trim().toLowerCase()));
+    
+    const matchesTaluk = selectedTaluk === 'ALL' || 
+      (vwr.parent_name && vwr.parent_name.toLowerCase() === selectedTaluk.toLowerCase());
+
+    return matchesSearch && matchesTaluk;
+  });
 
   return (
     <div className="main-content">
@@ -182,31 +206,87 @@ const AdminDashboard = () => {
 
       {/* Row 2: Tables & Disease breakdowns */}
       <div className="dashboard-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <div className="glass" style={{ padding: '24px' }}>
-          <h3 className="chart-title">Village Wise Risk Distribution</h3>
-          <div className="table-container">
-            <table className="data-table">
+        <div className="glass" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+            <h3 className="chart-title" style={{ margin: 0 }}>Village Wise Risk Distribution</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Showing {filteredVillages.length} of {village_wise_risk.length} villages
+            </span>
+          </div>
+
+          {/* Search & Subdistrict/Taluk Filter Controls */}
+          <div className="village-filter-controls">
+            <div style={{ position: 'relative', flex: 1, minWidth: '160px' }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input 
+                type="text"
+                placeholder="Search village name..."
+                value={villageSearch}
+                onChange={(e) => setVillageSearch(e.target.value)}
+                className="input-field"
+                style={{ 
+                  paddingLeft: '34px', 
+                  paddingTop: '8px', 
+                  paddingBottom: '8px', 
+                  fontSize: '0.85rem',
+                  width: '100%' 
+                }}
+              />
+            </div>
+            <div style={{ position: 'relative', minWidth: '150px' }}>
+              <select
+                value={selectedTaluk}
+                onChange={(e) => setSelectedTaluk(e.target.value)}
+                className="input-field"
+                style={{ 
+                  paddingTop: '8px', 
+                  paddingBottom: '8px', 
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  width: '100%',
+                  background: '#ffffff'
+                }}
+              >
+                <option value="ALL">All Taluks (10)</option>
+                {OFFICIAL_TALUKS.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Compact Table Container with Sticky Header */}
+          <div className="compact-table-container">
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th>Village</th>
-                  <th>Subdistrict</th>
-                  <th>Total Patients</th>
-                  <th>High Risk</th>
+                  <th style={{ minWidth: '140px' }}>Village</th>
+                  <th style={{ minWidth: '130px' }}>Subdistrict</th>
+                  <th style={{ minWidth: '100px', textAlign: 'center' }}>Total Patients</th>
+                  <th style={{ minWidth: '110px', textAlign: 'center' }}>High Risk</th>
                 </tr>
               </thead>
               <tbody>
-                {village_wise_risk.map(vwr => (
-                  <tr key={vwr.id}>
-                    <td><strong>{vwr.name}</strong></td>
-                    <td>{vwr.parent_name}</td>
-                    <td>{vwr.patients}</td>
-                    <td>
-                      <span className={`badge ${vwr.high_risk > 0 ? 'badge-danger' : 'badge-success'}`}>
-                        {vwr.high_risk} High Risk
-                      </span>
+                {filteredVillages.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-secondary)' }}>
+                      No villages matching <strong>"{villageSearch}"</strong> {selectedTaluk !== 'ALL' ? `in ${selectedTaluk} Taluk` : ''}.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredVillages.map(vwr => (
+                    <tr key={vwr.id}>
+                      <td><strong>{vwr.name}</strong></td>
+                      <td>{vwr.parent_name}</td>
+                      <td style={{ textAlign: 'center' }}>{vwr.patients}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${vwr.high_risk > 0 ? 'badge-danger' : 'badge-success'}`}>
+                          {vwr.high_risk} High Risk
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
