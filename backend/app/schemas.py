@@ -255,6 +255,9 @@ class FollowupBase(BaseModel):
     status: Optional[str] = 'PENDING'
     priority: Optional[str] = 'MEDIUM'
     reason: Optional[str] = None
+    village_name: Optional[str] = None
+    subdistrict_name: Optional[str] = None
+    doctor_name: Optional[str] = None
 
 class FollowupCreate(FollowupBase):
     pass
@@ -377,4 +380,19 @@ class PushSubscriptionCreate(BaseModel):
 
 class VapidPublicKeyResponse(BaseModel):
     public_key: str
+
+# Vitals Reminder Schema
+class VitalsReminder(BaseModel):
+    patient_id: str
+    patient_name: str
+    patient_code: str
+    village_id: Optional[str] = None
+    village_name: Optional[str] = None
+    last_recorded_at: Optional[datetime] = None
+    reminder_reason: str
+    reminder_status: str  # 'Entry Needed' | 'Due for Review' | 'Recorded'
+    followup_id: Optional[str] = None
+    scheduled_date: Optional[datetime] = None
+    priority: Optional[str] = None
+
 

@@ -670,3 +670,105 @@ body {
   }
 }
 
+/* Follow-up Summary Cards & Dashboard Integration */
+.followup-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 900px) {
+  .followup-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .followup-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.followup-filter-grid {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.2fr 1.2fr 1.4fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1024px) {
+  .followup-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .followup-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Subtle Status Badges */
+.badge-critical {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #f87171;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.badge-overdue {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.badge-due-today {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.badge-upcoming {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.badge-completed {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-cancelled {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+/* Vitals Reminder Status Badges */
+.badge-reminder-entry-needed {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  font-weight: 600;
+}
+
+.badge-reminder-due-review {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  font-weight: 600;
+}
+
+.badge-reminder-recorded {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-weight: 500;
+}
+
+

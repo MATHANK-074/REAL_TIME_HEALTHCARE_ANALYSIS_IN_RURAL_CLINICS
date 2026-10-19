@@ -162,6 +162,13 @@ export const api = {
     return handleResponse(res, 'Failed to submit health record review');
   },
 
+  getVitalsReminders: async () => {
+    const res = await fetch(`${BASE_URL}/health-records/reminders`, {
+      headers: getHeaders(),
+    });
+    return handleResponse(res, 'Failed to fetch vitals entry reminders');
+  },
+
   // Dashboards
   getDoctorDashboard: async () => {
     const res = await fetchWithTimeout(`${BASE_URL}/dashboard/doctor`, { headers: getHeaders() });

@@ -11,7 +11,14 @@ import {
   Navigation,
   Calendar,
   FileText,
-  MapPin
+  MapPin,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  X,
+  RefreshCw,
+  Bell
 } from 'lucide-react';
 import FieldVisitModal from '../components/FieldVisitModal';
 
@@ -105,8 +112,20 @@ const NurseDashboard = ({ user }) => {
 
   const [predictionResults, setPredictionResults] = useState(null);
 
-  // Followups State
+  // Followups State & Filters
   const [followups, setFollowups] = useState([]);
+  const [followupsLoading, setFollowupsLoading] = useState(false);
+  const [followupSearch, setFollowupSearch] = useState('');
+  const [followupStatus, setFollowupStatus] = useState('ALL');
+  const [followupStartDate, setFollowupStartDate] = useState('');
+  const [followupEndDate, setFollowupEndDate] = useState('');
+  const [selectedFollowupDetail, setSelectedFollowupDetail] = useState(null);
+
+  // Vitals Entry Reminders State & Filters
+  const [reminders, setReminders] = useState([]);
+  const [remindersLoading, setRemindersLoading] = useState(false);
+  const [reminderSearch, setReminderSearch] = useState('');
+  const [reminderStatusFilter, setReminderStatusFilter] = useState('ALL');
 
   // New Patient Form State
   const [regName, setRegName] = useState('');
@@ -186,13 +205,28 @@ const NurseDashboard = ({ user }) => {
 
   const loadFollowups = useCallback(async () => {
     try {
+      setFollowupsLoading(true);
       const data = await api.getFollowups();
-      const activeFollowups = data.filter(f => f.status !== 'COMPLETED' && f.status !== 'CANCELLED');
-      setFollowups(activeFollowups);
+      setFollowups(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to fetch followups', e);
+    } finally {
+      setFollowupsLoading(false);
     }
   }, []);
+
+  const loadVitalsReminders = useCallback(async () => {
+    try {
+      setRemindersLoading(true);
+      const data = await api.getVitalsReminders();
+      setReminders(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch vitals reminders', e);
+    } finally {
+      setRemindersLoading(false);
+    }
+  }, []);
+
 
   // Helper to reset vitals form
   const resetVitals = () => {
@@ -211,13 +245,175 @@ const NurseDashboard = ({ user }) => {
     setVNotes('');
   };
 
+  // Helper function to determine live follow-up status & overdue days
+  const getFollowupComputedStatus = (f) => {
+    const rawStatus = (f.status || 'PENDING').toUpperCase();
+    if (rawStatus === 'COMPLETED') {
+      return { key: 'COMPLETED', label: 'Completed', badgeClass: 'badge-completed', overdueDays: 0 };
+    }
+    if (rawStatus === 'CANCELLED') {
+      return { key: 'CANCELLED', label: 'Cancelled', badgeClass: 'badge-cancelled', overdueDays: 0 };
+    }
+
+    const priorityUpper = (f.priority || '').toUpperCase();
+    const isDoctorCritical = priorityUpper === 'CRITICAL' || priorityUpper === 'URGENT';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const fDate = new Date(f.followup_date);
+    fDate.setHours(0, 0, 0, 0);
+
+    const diffTime = today.getTime() - fDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (isDoctorCritical) {
+      return {
+        key: 'CRITICAL',
+        label: 'CRITICAL — CONTACT DOCTOR IMMEDIATELY',
+        badgeClass: 'badge-critical',
+        overdueDays: diffDays > 0 ? diffDays : 0,
+        isCritical: true
+      };
+    } else if (diffDays > 0) {
+      return { 
+        key: 'OVERDUE', 
+        label: `Overdue by ${diffDays}d`, 
+        badgeClass: 'badge-overdue', 
+        overdueDays: diffDays,
+        isCritical: false
+      };
+    } else if (diffDays === 0) {
+      return { key: 'DUE_TODAY', label: 'Due Today', badgeClass: 'badge-due-today', overdueDays: 0, isCritical: false };
+    } else {
+      return { key: 'UPCOMING', label: 'Upcoming', badgeClass: 'badge-upcoming', overdueDays: 0, isCritical: false };
+    }
+  };
+
+  // Follow-up Summary Counts from actual backend data for this nurse's authorized village
+  const followupSummary = followups.reduce((acc, f) => {
+    const comp = getFollowupComputedStatus(f);
+    acc.total += 1;
+    if (comp.key === 'COMPLETED') acc.completed += 1;
+    else if (comp.key === 'DUE_TODAY' || (comp.isCritical && comp.overdueDays === 0)) acc.dueToday += 1;
+    else if (comp.key === 'OVERDUE' || (comp.isCritical && comp.overdueDays > 0)) acc.overdue += 1;
+    else if (comp.key === 'UPCOMING') acc.upcoming += 1;
+    return acc;
+  }, { total: 0, dueToday: 0, overdue: 0, completed: 0, upcoming: 0 });
+
+  // Filtered & Strictly Prioritized Active Followups:
+  // Excludes COMPLETED and CANCELLED follow-ups from the nurse's active list
+  const activeFollowups = followups.filter(f => {
+    const s = (f.status || 'PENDING').toUpperCase();
+    return s !== 'COMPLETED' && s !== 'CANCELLED';
+  });
+
+  const filteredFollowups = activeFollowups.filter(f => {
+    if (followupSearch.trim()) {
+      const q = followupSearch.trim().toLowerCase();
+      const name = (f.patient_name || '').toLowerCase();
+      const code = (f.patient_code || '').toLowerCase();
+      const pid = String(f.patient_id || '').toLowerCase();
+      if (!name.includes(q) && !code.includes(q) && !pid.includes(q)) return false;
+    }
+
+    if (followupStatus !== 'ALL') {
+      const comp = getFollowupComputedStatus(f);
+      if (followupStatus === 'CRITICAL' && !comp.isCritical) return false;
+      if (followupStatus === 'OVERDUE' && comp.key !== 'OVERDUE' && !(comp.isCritical && comp.overdueDays > 0)) return false;
+      if (followupStatus === 'DUE_TODAY' && comp.key !== 'DUE_TODAY') return false;
+      if (followupStatus === 'UPCOMING' && comp.key !== 'UPCOMING') return false;
+    }
+
+    if (followupStartDate) {
+      const fDateStr = new Date(f.followup_date).toISOString().split('T')[0];
+      if (fDateStr < followupStartDate) return false;
+    }
+    if (followupEndDate) {
+      const fDateStr = new Date(f.followup_date).toISOString().split('T')[0];
+      if (fDateStr > followupEndDate) return false;
+    }
+
+    return true;
+  }).sort((a, b) => {
+    // Priority Ordering Rule:
+    // A. Doctor-designated critical/urgent follow-ups requiring immediate action
+    // B. Overdue pending follow-ups
+    // C. Follow-ups due today
+    // D. Upcoming follow-ups, earliest date first
+    const compA = getFollowupComputedStatus(a);
+    const compB = getFollowupComputedStatus(b);
+
+    const getRank = (comp) => {
+      if (comp.isCritical) return 1;
+      if (comp.key === 'OVERDUE') return 2;
+      if (comp.key === 'DUE_TODAY') return 3;
+      return 4; // UPCOMING
+    };
+
+    const rankA = getRank(compA);
+    const rankB = getRank(compB);
+
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+
+    // Within same priority bucket, sort by scheduled date ascending (earliest first)
+    const timeA = new Date(a.followup_date).getTime();
+    const timeB = new Date(b.followup_date).getTime();
+    return timeA - timeB;
+  });
+
+  // Vitals Reminders Computed Filtering & Sorting
+  const filteredReminders = reminders.filter((rem) => {
+    // 1. Search filter
+    if (reminderSearch.trim()) {
+      const q = reminderSearch.toLowerCase();
+      const nameMatch = (rem.patient_name || '').toLowerCase().includes(q);
+      const codeMatch = (rem.patient_code || '').toLowerCase().includes(q);
+      const reasonMatch = (rem.reminder_reason || '').toLowerCase().includes(q);
+      if (!nameMatch && !codeMatch && !reasonMatch) return false;
+    }
+
+    // 2. Status filter
+    if (reminderStatusFilter !== 'ALL') {
+      if (rem.reminder_status !== reminderStatusFilter) return false;
+    }
+
+    return true;
+  }).sort((a, b) => {
+    // Priority order:
+    // 1. Entry Needed (patient without required baseline vitals)
+    // 2. Due for Review
+    // 3. Recorded (routine up to date)
+    const rankMap = { 'Entry Needed': 1, 'Due for Review': 2, 'Recorded': 3 };
+    const rankA = rankMap[a.reminder_status] || 9;
+    const rankB = rankMap[b.reminder_status] || 9;
+    if (rankA !== rankB) return rankA - rankB;
+
+    // Secondary: if both due for review with scheduled date, earliest first
+    if (a.scheduled_date && b.scheduled_date) {
+      return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime();
+    }
+    return 0;
+  });
+
+  const remindersSummary = {
+    total: reminders.length,
+    entryNeeded: reminders.filter(r => r.reminder_status === 'Entry Needed').length,
+    dueReview: reminders.filter(r => r.reminder_status === 'Due for Review').length,
+    recorded: reminders.filter(r => r.reminder_status === 'Recorded').length
+  };
+
   // Initial load on mount
   useEffect(() => {
     loadUserProfile();
     loadVillages();
     loadFieldVisits();
     loadFollowups();
-  }, [loadUserProfile, loadVillages, loadFieldVisits, loadFollowups]);
+    loadVitalsReminders();
+  }, [loadUserProfile, loadVillages, loadFieldVisits, loadFollowups, loadVitalsReminders]);
+
 
   // Load patients when search query changes
   useEffect(() => {
@@ -328,6 +524,8 @@ const NurseDashboard = ({ user }) => {
       setShowVitalsModal(false);
       resetVitals();
       loadPatients();
+      loadVitalsReminders();
+      loadFollowups();
     } catch (err) {
       const msg = err.message || 'Failed to log health vitals.';
       setVitalsError(msg);
@@ -440,63 +638,536 @@ const NurseDashboard = ({ user }) => {
         </div>
       </div>
 
-      {/* Follow-ups Section */}
+      {/* FEATURE 1: Vitals Entry Reminder Section */}
       <div className="glass" style={{ padding: '24px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Calendar color="var(--secondary)" />
-            <h3 className="chart-title" style={{ margin: 0 }}>My Area Follow-ups</h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Bell color="var(--primary)" size={20} />
+              <h3 className="chart-title" style={{ margin: 0 }}>Vitals Entry Reminders</h3>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: '4px 0 0 0' }}>
+              Patients within your assigned village who need an initial or follow-up vitals recording
+            </p>
+          </div>
+          <button 
+            type="button"
+            onClick={loadVitalsReminders} 
+            className="btn btn-secondary btn-sm"
+            disabled={remindersLoading}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={14} className={remindersLoading ? 'spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        {/* Compact Summary KPI Cards */}
+        <div className="followup-summary-grid" style={{ marginBottom: '16px' }}>
+          <div className="glass kpi-card" style={{ padding: '14px 16px' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.82rem' }}>Total Area Patients</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(14, 165, 233, 0.1)', color: 'var(--primary)', padding: '6px' }}>
+                <User size={15} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.4rem', marginTop: '2px' }}>{remindersSummary.total}</div>
+          </div>
+
+          <div className="glass kpi-card" style={{ padding: '14px 16px', borderLeft: '3px solid #ef4444' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.82rem' }}>Entry Needed</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '6px' }}>
+                <Heart size={15} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.4rem', marginTop: '2px', color: '#b91c1c' }}>{remindersSummary.entryNeeded}</div>
+          </div>
+
+          <div className="glass kpi-card" style={{ padding: '14px 16px', borderLeft: '3px solid #f59e0b' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.82rem' }}>Due for Review</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '6px' }}>
+                <Clock size={15} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.4rem', marginTop: '2px', color: '#b45309' }}>{remindersSummary.dueReview}</div>
+          </div>
+
+          <div className="glass kpi-card" style={{ padding: '14px 16px', borderLeft: '3px solid #10b981' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.82rem' }}>Recorded</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '6px' }}>
+                <CheckCircle size={15} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.4rem', marginTop: '2px', color: '#047857' }}>{remindersSummary.recorded}</div>
           </div>
         </div>
-        
-        <div className="table-container">
-          <table className="data-table">
+
+        {/* Filters Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '10px', alignItems: 'center', marginBottom: '14px' }}>
+          <div className="search-bar" style={{ padding: '6px 12px', background: '#ffffff', border: '1px solid var(--border-card)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Search size={14} color="var(--text-secondary)" />
+            <input 
+              type="text" 
+              placeholder="Search by patient name, ID, or reminder reason..." 
+              value={reminderSearch}
+              onChange={(e) => setReminderSearch(e.target.value)}
+              style={{ border: 'none', outline: 'none', width: '100%', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <div>
+            <select
+              value={reminderStatusFilter}
+              onChange={(e) => setReminderStatusFilter(e.target.value)}
+              className="form-control"
+              style={{ padding: '6px 10px', fontSize: '0.82rem', background: '#ffffff' }}
+            >
+              <option value="ALL">All Reminders</option>
+              <option value="Entry Needed">Entry Needed</option>
+              <option value="Due for Review">Due for Review</option>
+              <option value="Recorded">Recorded</option>
+            </select>
+          </div>
+
+          {(reminderSearch || reminderStatusFilter !== 'ALL') && (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReminderSearch('');
+                  setReminderStatusFilter('ALL');
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Reminders Table */}
+        <div className="compact-table-container" style={{ maxHeight: '280px' }}>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Patient ID</th>
-                <th>Priority</th>
-                <th>Reason</th>
-                <th>Status</th>
-                <th>Action</th>
+                <th style={{ minWidth: '150px' }}>Patient</th>
+                <th style={{ minWidth: '130px' }}>Last Vitals Date</th>
+                <th style={{ minWidth: '220px' }}>Reminder Reason</th>
+                <th style={{ minWidth: '130px', textAlign: 'center' }}>Status</th>
+                <th style={{ minWidth: '120px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {followups.length === 0 ? (
+              {filteredReminders.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
-                    No pending follow-ups in your area.
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '28px 16px', color: 'var(--text-secondary)' }}>
+                    No vitals reminders matching criteria in your assigned area.
                   </td>
                 </tr>
               ) : (
-                followups.map((fu) => (
-                  <tr key={fu.id}>
-                    <td>{new Date(fu.followup_date).toLocaleDateString()}</td>
-                    <td>{fu.patient_id}</td>
-                    <td>
-                      <span className={`badge ${fu.priority === 'HIGH' || fu.priority === 'URGENT' ? 'badge-danger' : 'badge-primary'}`}>
-                        {fu.priority || 'MEDIUM'}
-                      </span>
-                    </td>
-                    <td>{fu.reason || '-'}</td>
-                    <td>{fu.status}</td>
-                    <td>
-                      {fu.status !== 'COMPLETED' && (
-                        <button 
-                          className="btn btn-secondary btn-sm" 
-                          onClick={() => handleCompleteFollowup(fu.id)}
+                filteredReminders.map((r) => {
+                  let badgeClass = 'badge-reminder-recorded';
+                  if (r.reminder_status === 'Entry Needed') badgeClass = 'badge-reminder-entry-needed';
+                  else if (r.reminder_status === 'Due for Review') badgeClass = 'badge-reminder-due-review';
+
+                  return (
+                    <tr key={r.patient_id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{r.patient_name}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                          {r.patient_code}
+                        </div>
+                      </td>
+                      <td>
+                        {r.last_recorded_at ? (
+                          <>
+                            <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
+                              {new Date(r.last_recorded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                              {new Date(r.last_recorded_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '0.8rem', color: '#b91c1c', fontStyle: 'italic', fontWeight: 500 }}>
+                            No entries recorded
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          {r.reminder_reason}
+                        </div>
+                        {r.scheduled_date && (
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            Follow-up: {new Date(r.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${badgeClass}`} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+                          {r.reminder_status}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            // Find corresponding patient object or construct payload
+                            const pObj = patients.find(p => (p.id || p._id) === r.patient_id) || {
+                              id: r.patient_id,
+                              _id: r.patient_id,
+                              name: r.patient_name,
+                              patient_code: r.patient_code,
+                              village_id: r.village_id
+                            };
+                            handleOpenVitals(pObj);
+                          }}
+                          style={{ padding: '4px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          title="Log Vitals"
                         >
-                          Complete <CheckCircle size={14} />
+                          <Heart size={13} style={{ color: '#ffffff' }} />
+                          <span>Log Vitals</span>
                         </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Follow-ups Section */}
+      <div className="glass" style={{ padding: '24px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Calendar color="var(--secondary)" />
+              <h3 className="chart-title" style={{ margin: 0 }}>My Area Follow-ups</h3>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: '4px 0 0 0' }}>
+              Assigned village follow-up scheduling, due alerts, and patient check-in monitoring
+            </p>
+          </div>
+          <button 
+            type="button"
+            onClick={loadFollowups} 
+            className="btn btn-secondary btn-sm"
+            disabled={followupsLoading}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={14} className={followupsLoading ? 'spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        {/* STEP 2: Summary Cards */}
+        <div className="followup-summary-grid">
+          <div className="glass kpi-card" style={{ padding: '16px' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.85rem' }}>Total Follow-ups</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(14, 165, 233, 0.1)', color: 'var(--primary)' }}>
+                <Calendar size={16} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.5rem', marginTop: '4px' }}>{followupSummary.total}</div>
+          </div>
+
+          <div className="glass kpi-card" style={{ padding: '16px', borderLeft: '3px solid #f97316' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.85rem' }}>Due Today</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(249, 115, 22, 0.1)', color: '#f97316' }}>
+                <Clock size={16} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.5rem', marginTop: '4px', color: '#c2410c' }}>{followupSummary.dueToday}</div>
+          </div>
+
+          <div className="glass kpi-card" style={{ padding: '16px', borderLeft: '3px solid var(--danger)' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.85rem' }}>Overdue</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)' }}>
+                <AlertTriangle size={16} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.5rem', marginTop: '4px', color: 'var(--danger)' }}>{followupSummary.overdue}</div>
+          </div>
+
+          <div className="glass kpi-card" style={{ padding: '16px', borderLeft: '3px solid var(--secondary)' }}>
+            <div className="kpi-header">
+              <span style={{ fontSize: '0.85rem' }}>Completed</span>
+              <div className="kpi-icon-wrapper" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--secondary)' }}>
+                <CheckCircle2 size={16} />
+              </div>
+            </div>
+            <div className="kpi-val" style={{ fontSize: '1.5rem', marginTop: '4px', color: 'var(--secondary)' }}>{followupSummary.completed}</div>
+          </div>
+        </div>
+
+        {/* STEP 3: Search and Filters */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
+          {/* Patient Search */}
+          <div style={{ position: 'relative' }}>
+            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+            <input 
+              type="text"
+              placeholder="Search patient name or ID..."
+              value={followupSearch}
+              onChange={(e) => setFollowupSearch(e.target.value)}
+              className="form-control"
+              style={{ paddingLeft: '34px', paddingTop: '8px', paddingBottom: '8px', fontSize: '0.85rem', width: '100%' }}
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <select
+              value={followupStatus}
+              onChange={(e) => setFollowupStatus(e.target.value)}
+              className="form-control"
+              style={{ paddingTop: '8px', paddingBottom: '8px', fontSize: '0.85rem', width: '100%', background: '#ffffff', cursor: 'pointer' }}
+            >
+              <option value="ALL">All Active Statuses</option>
+              <option value="CRITICAL">Critical Doctor Follow-ups</option>
+              <option value="DUE_TODAY">Due Today</option>
+              <option value="OVERDUE">Overdue</option>
+              <option value="UPCOMING">Upcoming</option>
+            </select>
+          </div>
+
+          {/* Date Range Inputs */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <input 
+              type="date"
+              value={followupStartDate}
+              onChange={(e) => setFollowupStartDate(e.target.value)}
+              title="Start Date"
+              className="form-control"
+              style={{ padding: '6px 8px', fontSize: '0.8rem', width: '100%', background: '#ffffff' }}
+            />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>–</span>
+            <input 
+              type="date"
+              value={followupEndDate}
+              onChange={(e) => setFollowupEndDate(e.target.value)}
+              title="End Date"
+              className="form-control"
+              style={{ padding: '6px 8px', fontSize: '0.8rem', width: '100%', background: '#ffffff' }}
+            />
+          </div>
+
+          {/* Reset Filters */}
+          {(followupSearch || followupStatus !== 'ALL' || followupStartDate || followupEndDate) && (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFollowupSearch('');
+                  setFollowupStatus('ALL');
+                  setFollowupStartDate('');
+                  setFollowupEndDate('');
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '7px 14px', fontSize: '0.82rem' }}
+              >
+                Clear Filters
+              </button>
+            </div>
+          )}
+        </div>
+        
+        {/* STEP 4 & 5: Compact Table Container with Sticky Header */}
+        <div className="compact-table-container">
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ minWidth: '160px' }}>Patient</th>
+                <th style={{ minWidth: '180px' }}>Follow-up Reason</th>
+                <th style={{ minWidth: '130px' }}>Scheduled Date</th>
+                <th style={{ minWidth: '140px', textAlign: 'center' }}>Status</th>
+                <th style={{ minWidth: '160px', textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredFollowups.length === 0 ? (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-secondary)' }}>
+                    No pending follow-ups for your assigned area.
+                  </td>
+                </tr>
+              ) : (
+                filteredFollowups.map((fu) => {
+                  const compStatus = getFollowupComputedStatus(fu);
+                  return (
+                    <tr key={fu.id || fu._id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{fu.patient_name || 'Patient'}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                          {fu.patient_code || `ID: ${String(fu.patient_id).slice(-6)}`}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          {fu.reason || fu.notes || 'Routine Clinical Review'}
+                        </div>
+                        {fu.priority && fu.priority !== 'MEDIUM' && (
+                          <span style={{ fontSize: '0.72rem', color: fu.priority === 'HIGH' ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: 600 }}>
+                            Priority: {fu.priority}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>
+                          {new Date(fu.followup_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {new Date(fu.followup_date).toLocaleDateString('en-US', { weekday: 'short' })}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${compStatus.badgeClass}`} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>
+                          {compStatus.label}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button 
+                            type="button"
+                            className="btn btn-secondary btn-sm" 
+                            onClick={() => setSelectedFollowupDetail(fu)}
+                            style={{ padding: '4px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="View Follow-up Details"
+                          >
+                            <Eye size={13} />
+                            <span>Details</span>
+                          </button>
+                          {fu.status !== 'COMPLETED' && (
+                            <button 
+                              type="button"
+                              className="btn btn-primary btn-sm" 
+                              onClick={() => handleCompleteFollowup(fu.id || fu._id)}
+                              style={{ padding: '4px 10px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Mark as Completed"
+                            >
+                              <CheckCircle size={13} />
+                              <span>Done</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Follow-up Details Modal for Nurse */}
+      {selectedFollowupDetail && (
+        <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(4px)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass" style={{ background: '#ffffff', maxWidth: '520px', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-card)', paddingBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={18} style={{ color: 'var(--primary)' }} />
+                Follow-up Details
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setSelectedFollowupDetail(null)} 
+                className="btn btn-secondary btn-sm" 
+                style={{ padding: '4px 8px', borderRadius: '50%' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.88rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Patient:</span>
+                <strong>{selectedFollowupDetail.patient_name || 'Patient'} [{selectedFollowupDetail.patient_code || '—'}]</strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Scheduled Date:</span>
+                <strong>{new Date(selectedFollowupDetail.followup_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Assigned Doctor:</span>
+                <strong>{selectedFollowupDetail.doctor_name || 'Doctor'}</strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Status:</span>
+                <span className={`badge ${getFollowupComputedStatus(selectedFollowupDetail).badgeClass}`}>
+                  {getFollowupComputedStatus(selectedFollowupDetail).label}
+                </span>
+              </div>
+
+              {selectedFollowupDetail.reason && (
+                <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>Reason:</div>
+                  <div style={{ fontWeight: 500 }}>{selectedFollowupDetail.reason}</div>
+                </div>
+              )}
+
+              {selectedFollowupDetail.notes && (
+                <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '8px' }}>
+                  <div style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>Clinical Instructions:</div>
+                  <div style={{ fontWeight: 500 }}>{selectedFollowupDetail.notes}</div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  const pid = selectedFollowupDetail.patient_id;
+                  setSelectedFollowupDetail(null);
+                  navigate(`/patients/${pid}`);
+                }} 
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <FileText size={14} />
+                <span>Patient Profile & History</span>
+              </button>
+
+              <button 
+                type="button" 
+                onClick={() => setSelectedFollowupDetail(null)} 
+                className="btn btn-primary btn-sm"
+                style={{ padding: '8px 20px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="glass" style={{ padding: '16px 20px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px' }}>

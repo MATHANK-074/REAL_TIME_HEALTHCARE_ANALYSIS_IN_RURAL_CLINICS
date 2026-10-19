@@ -6,7 +6,7 @@ from bson import ObjectId
 import datetime
 
 from ..database import get_db
-from ..schemas import HealthRecord as HealthRecordSchema, HealthRecordCreate, HealthRecordReviewUpdate, User
+from ..schemas import HealthRecord as HealthRecordSchema, HealthRecordCreate, HealthRecordReviewUpdate, VitalsReminder, User
 from .auth import get_current_user, require_role
 from .patients import enforce_patient_area_access
 from ..services.audit import log_audit
@@ -216,3 +216,126 @@ def review_health_record(
     
     record.update(update_fields)
     return serialize_doc(record)
+
+
+@router.get("/reminders", response_model=List[VitalsReminder])
+def get_vitals_reminders(
+    db: Database = Depends(get_db),
+    current_user: User = Depends(require_role(["NURSE", "ADMIN"]))
+):
+    """
+    Retrieve patients within the authenticated nurse's assigned village/authorized area
+    who need a vitals entry according to clinical workflow:
+    1. Patients with NO initial vitals entry ('Entry Needed').
+    2. Patients with scheduled doctor-defined follow-ups due or requiring vitals review ('Due for Review').
+    3. Patients whose vitals were recorded and are up to date ('Recorded').
+    Strict RBAC enforced from current_user's assignment.
+    """
+    filter_query = {}
+    if current_user.get("role") == 'NURSE':
+        user_area = current_user.get("area_id")
+        user_village = current_user.get("village_id")
+        if user_area:
+            filter_query["area_id"] = str(user_area)
+        elif user_village:
+            v_str = str(user_village)
+            v_query = [v_str]
+            if ObjectId.is_valid(v_str):
+                v_query.append(ObjectId(v_str))
+            filter_query["village_id"] = {"$in": v_query}
+
+    patients = list(db.patients.find(filter_query).sort("_id", -1))
+    
+    # Load village map
+    villages = {str(v["_id"]): v.get("name") for v in db.villages.find()}
+
+    today = datetime.datetime.now()
+    today_start = datetime.datetime(today.year, today.month, today.day)
+
+    reminders = []
+    vitals_keywords = ['vital', 'bp', 'glucose', 'sugar', 'hypertension', 're-assessment', 'screening', 'check', 'review']
+
+    for p in patients:
+        pid_str = str(p["_id"])
+        pid_query = [pid_str]
+        if ObjectId.is_valid(pid_str):
+            pid_query.append(ObjectId(pid_str))
+
+        # Check health records
+        hrs = list(db.health_records.find({"patient_id": {"$in": pid_query}}).sort("recorded_at", -1).limit(1))
+        latest_hr = hrs[0] if hrs else None
+        last_recorded_at = latest_hr.get("recorded_at") if latest_hr else None
+
+        # Check active followups
+        fus = list(db.followups.find({
+            "patient_id": {"$in": pid_query},
+            "status": {"$in": ["PENDING", "SCHEDULED"]}
+        }).sort("followup_date", 1))
+
+        reminder_reason = None
+        reminder_status = None
+        followup_id = None
+        scheduled_date = None
+        fu_priority = None
+
+        if not latest_hr:
+            reminder_status = "Entry Needed"
+            reminder_reason = "Initial vitals registration required"
+            if fus:
+                fu = fus[0]
+                followup_id = str(fu["_id"])
+                scheduled_date = fu.get("followup_date")
+                fu_priority = fu.get("priority")
+                if fu.get("reason"):
+                    reminder_reason = f"Initial vitals needed & follow-up: {fu.get('reason')}"
+        else:
+            # Check for vitals or clinical follow-up
+            vitals_fu = None
+            for f in fus:
+                combined_text = f"{f.get('reason', '') or ''} {f.get('notes', '') or ''}".lower()
+                if any(k in combined_text for k in vitals_keywords) or f.get("priority") in ["HIGH", "URGENT", "CRITICAL"]:
+                    vitals_fu = f
+                    break
+            if not vitals_fu and fus:
+                vitals_fu = fus[0]
+
+            if vitals_fu:
+                followup_id = str(vitals_fu["_id"])
+                scheduled_date = vitals_fu.get("followup_date")
+                fu_priority = vitals_fu.get("priority")
+                reminder_status = "Due for Review"
+                
+                f_date = vitals_fu.get("followup_date")
+                is_due_or_past = False
+                if f_date:
+                    f_dt = datetime.datetime(f_date.year, f_date.month, f_date.day) if isinstance(f_date, datetime.date) else f_date
+                    is_due_or_past = (f_dt <= today_start)
+
+                fu_title = vitals_fu.get("reason") or vitals_fu.get("notes") or "Clinical Vitals Review"
+                if is_due_or_past:
+                    reminder_reason = f"Doctor scheduled review due: {fu_title}"
+                else:
+                    reminder_reason = f"Upcoming scheduled review: {fu_title}"
+            else:
+                reminder_status = "Recorded"
+                reminder_reason = "Vitals recorded; routine monitoring up to date"
+
+        vil_id_str = str(p.get("village_id") or "")
+        vil_name = villages.get(vil_id_str, p.get("village_name", ""))
+
+        reminders.append(VitalsReminder(
+            patient_id=pid_str,
+            patient_name=p.get("name", "Unknown Patient"),
+            patient_code=p.get("patient_code", f"RH-{pid_str[-4:]}"),
+            village_id=vil_id_str or None,
+            village_name=vil_name or None,
+            last_recorded_at=last_recorded_at,
+            reminder_reason=reminder_reason,
+            reminder_status=reminder_status,
+            followup_id=followup_id,
+            scheduled_date=scheduled_date,
+            priority=fu_priority
+        ))
+
+    return reminders
+

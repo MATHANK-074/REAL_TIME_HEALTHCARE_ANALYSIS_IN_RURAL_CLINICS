@@ -108,16 +108,32 @@ def get_followups(
         
     followups = list(db.followups.find(filter_query).sort("followup_date", 1))
     
+    subdistricts = {str(s["_id"]): s.get("name") for s in db.subdistricts.find()}
+    villages = {str(v["_id"]): {"name": v.get("name"), "sub": subdistricts.get(str(v.get("subdistrict_id", "")))} for v in db.villages.find()}
+    doctors = {str(u["id"] if "id" in u else u["_id"]): u.get("name") for u in db.users.find({"role": "DOCTOR"})}
+    
     enriched_followups = []
     for f in followups:
         f_serialized = serialize_doc(f)
+        vil_id = str(f.get("village_id") or "")
         try:
             p = db.patients.find_one({"_id": ObjectId(f_serialized["patient_id"])})
             if p:
                 f_serialized["patient_code"] = p.get("patient_code")
                 f_serialized["patient_name"] = p.get("name")
+                if not vil_id and p.get("village_id"):
+                    vil_id = str(p.get("village_id"))
         except Exception:
             pass
+
+        if vil_id in villages:
+            f_serialized["village_name"] = villages[vil_id]["name"]
+            f_serialized["subdistrict_name"] = villages[vil_id]["sub"]
+        
+        doc_id = str(f.get("doctor_id") or "")
+        if doc_id in doctors:
+            f_serialized["doctor_name"] = doctors[doc_id]
+
         enriched_followups.append(f_serialized)
         
     return enriched_followups

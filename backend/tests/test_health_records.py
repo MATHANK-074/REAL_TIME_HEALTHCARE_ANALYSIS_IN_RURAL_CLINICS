@@ -53,7 +53,7 @@ def test_nurse_vitals_logging_and_persistence(test_client, real_db, auth_headers
         assert rec_data.get("diastolic_bp") == 85
         assert rec_data.get("blood_glucose") == 110
         assert rec_data.get("bmi") is not None
-        assert round(rec_data.get("bmi"), 1) == 22.9
+        assert round(float(rec_data.get("bmi")), 1) == 22.9
         assert rec_data.get("review_status") == "PENDING_REVIEW"
         assert rec_data.get("recorded_by") is not None
 
