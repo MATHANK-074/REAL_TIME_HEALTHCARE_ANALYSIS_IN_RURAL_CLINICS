@@ -280,7 +280,7 @@ const AdminDashboard = () => {
                         Screened at <strong>{feed.patient.village} ({feed.patient.subdistrict})</strong> • {feed.prediction.disease}
                       </div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Vitals: BP {feed.health_record.blood_pressure} • BS {feed.health_record.blood_glucose} mg/dL • BMI {feed.health_record.bmi}
+                        Vitals: BP {feed.health_record.blood_pressure} • BS {feed.health_record.blood_glucose} mg/dL • BMI {feed.health_record.bmi && !isNaN(feed.health_record.bmi) ? Number(feed.health_record.bmi).toFixed(1) : feed.health_record.bmi}
                       </div>
                     </div>
                   </div>
