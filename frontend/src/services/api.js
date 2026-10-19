@@ -164,12 +164,12 @@ export const api = {
 
   // Dashboards
   getDoctorDashboard: async () => {
-    const res = await fetch(`${BASE_URL}/dashboard/doctor`, { headers: getHeaders() });
+    const res = await fetchWithTimeout(`${BASE_URL}/dashboard/doctor`, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch doctor metrics');
   },
 
   getAdminDashboard: async () => {
-    const res = await fetch(`${BASE_URL}/dashboard/admin`, { headers: getHeaders() });
+    const res = await fetchWithTimeout(`${BASE_URL}/dashboard/admin`, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch administrator metrics');
   },
 
@@ -301,12 +301,12 @@ export const api = {
   },
 
   getDistricts: async () => {
-    const res = await fetch(`${BASE_URL}/locations/districts`, { headers: getHeaders() });
+    const res = await fetchWithTimeout(`${BASE_URL}/locations/districts`, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch districts');
   },
   
   createDistrict: async (data) => {
-    const res = await fetch(`${BASE_URL}/locations/districts`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/locations/districts`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
@@ -317,25 +317,25 @@ export const api = {
   // Geography cascade endpoints
   getTaluks: async (districtId = '') => {
     const url = districtId ? `${BASE_URL}/locations/taluks?district_id=${districtId}` : `${BASE_URL}/locations/taluks`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch taluks');
   },
 
   getFirkas: async (talukId = '') => {
     const url = talukId ? `${BASE_URL}/locations/firkas?taluk_id=${talukId}` : `${BASE_URL}/locations/firkas`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch firkas');
   },
 
   // Updated getVillages to use firkaId
   getVillages: async (firkaId = '') => {
     const url = firkaId ? `${BASE_URL}/locations/villages?firka_id=${firkaId}` : `${BASE_URL}/locations/villages`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch villages');
   },
 
   createVillage: async (data) => {
-    const res = await fetch(`${BASE_URL}/locations/villages`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/locations/villages`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
@@ -345,25 +345,25 @@ export const api = {
 
   getAreas: async (villageId = '') => {
     const url = villageId ? `${BASE_URL}/locations/areas?village_id=${villageId}` : `${BASE_URL}/locations/areas`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch areas');
   },
 
   getFacilities: async (areaId = '') => {
     const url = areaId ? `${BASE_URL}/locations/facilities?area_id=${areaId}` : `${BASE_URL}/locations/facilities`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch facilities');
   },
 
   // Deprecated subdistrict endpoints (retain for compatibility)
   getSubdistricts: async (districtId = '') => {
     const url = districtId ? `${BASE_URL}/locations/subdistricts?district_id=${districtId}` : `${BASE_URL}/locations/subdistricts`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch subdistricts');
   },
 
   createSubdistrict: async (data) => {
-    const res = await fetch(`${BASE_URL}/locations/subdistricts`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/locations/subdistricts`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
@@ -372,7 +372,7 @@ export const api = {
   },
   
   createArea: async (data) => {
-    const res = await fetch(`${BASE_URL}/locations/areas`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/locations/areas`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
@@ -384,12 +384,12 @@ export const api = {
     let url = `${BASE_URL}/locations/clinics?`;
     if (villageId) url += `village_id=${villageId}&`;
     if (areaId) url += `area_id=${areaId}`;
-    const res = await fetch(url, { headers: getHeaders() });
+    const res = await fetchWithTimeout(url, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch clinics');
   },
   
   createClinic: async (data) => {
-    const res = await fetch(`${BASE_URL}/locations/clinics`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/locations/clinics`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data)
@@ -399,12 +399,12 @@ export const api = {
   
   // Users
   getUsers: async () => {
-    const res = await fetch(`${BASE_URL}/users`, { headers: getHeaders() });
+    const res = await fetchWithTimeout(`${BASE_URL}/users`, { headers: getHeaders() });
     return handleResponse(res, 'Failed to fetch users');
   },
   
   updateUser: async (userId, data) => {
-    const res = await fetch(`${BASE_URL}/users/${userId}`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/users/${userId}`, {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(data)

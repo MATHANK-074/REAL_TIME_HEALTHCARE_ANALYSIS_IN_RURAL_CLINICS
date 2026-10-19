@@ -191,14 +191,19 @@ def submit_doctor_decision(db: Database, recommendation_id: str, doctor_id: str,
     db.doctor_reviews.insert_one(review_doc)
     
     # 3. Mirror the status back to Health Record for backwards compatibility if needed
-    db.health_records.update_one(
-        {"_id": ObjectId(rec["health_record_id"])},
-        {"$set": {
-            "review_status": new_status,
-            "reviewed_by": doctor_id,
-            "reviewed_at": now,
-            "doctor_notes": notes
-        }}
-    )
+    if rec.get("health_record_id"):
+        try:
+            hr_id = ObjectId(rec["health_record_id"])
+        except Exception:
+            hr_id = rec["health_record_id"]
+        db.health_records.update_one(
+            {"_id": hr_id},
+            {"$set": {
+                "review_status": new_status,
+                "reviewed_by": doctor_id,
+                "reviewed_at": now,
+                "doctor_notes": notes
+            }}
+        )
     
     return review_doc

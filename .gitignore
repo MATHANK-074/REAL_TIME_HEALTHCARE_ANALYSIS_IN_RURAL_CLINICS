@@ -46,6 +46,13 @@ frontend_log.txt
 # Temp scripts
 backend/check_pw.py
 backend/update_pw.py
+backend/fix_pwd.py
+backend/update_nurse_pw.py
+backend/check_queue.py
+backend/reset.py
+backend/test_pdf_extractor.py
+datasets/maternal_real.csv
+image.png
 
 # IDEs
 .vscode/

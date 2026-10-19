@@ -60,6 +60,8 @@ def update_user_details(
         update_fields["area_id"] = update_data.area_id
     if update_data.clinic_id is not None:
         update_fields["clinic_id"] = update_data.clinic_id
+    if update_data.qualification is not None:
+        update_fields["qualification"] = update_data.qualification
     if update_data.is_active is not None:
         update_fields["is_active"] = update_data.is_active
         

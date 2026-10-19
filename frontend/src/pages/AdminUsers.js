@@ -7,8 +7,6 @@ const AdminUsers = () => {
   const [districts, setDistricts] = useState([]);
   const [subdistricts, setSubdistricts] = useState([]);
   const [villages, setVillages] = useState([]);
-  const [areas, setAreas] = useState([]);
-  const [clinics, setClinics] = useState([]);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,25 +23,47 @@ const AdminUsers = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [talukFilter, setTalukFilter] = useState('ALL');
+
   const loadData = async () => {
     try {
       setLoading(true);
-      const [usersData, distData, subData, vilData, areaData, clinicData] = await Promise.all([
+      setError('');
+      const [usersRes, distRes, subRes, vilRes] = await Promise.allSettled([
         api.getUsers(),
         api.getDistricts(),
         api.getSubdistricts(),
-        api.getVillages(),
-        api.getAreas(),
-        api.getClinics()
+        api.getVillages()
       ]);
-      setUsers(usersData);
-      setDistricts(distData);
-      setSubdistricts(subData);
-      setVillages(vilData);
-      setAreas(areaData || []);
-      setClinics(clinicData || []);
+
+      if (usersRes.status === 'fulfilled') {
+        setUsers(usersRes.value || []);
+      } else {
+        console.error('Failed to fetch users:', usersRes.reason);
+        setError(usersRes.reason?.message || 'Failed to fetch staff data. Please check connection.');
+      }
+
+      if (distRes.status === 'fulfilled') {
+        setDistricts(distRes.value || []);
+      } else {
+        console.warn('Failed to fetch districts:', distRes.reason);
+      }
+
+      if (subRes.status === 'fulfilled') {
+        setSubdistricts(subRes.value || []);
+      } else {
+        console.warn('Failed to fetch subdistricts:', subRes.reason);
+      }
+
+      if (vilRes.status === 'fulfilled') {
+        setVillages(vilRes.value || []);
+      } else {
+        console.warn('Failed to fetch villages:', vilRes.reason);
+      }
     } catch (err) {
-      setError('Failed to fetch data.');
+      console.error('Failed to fetch admin users data:', err);
+      setError(err.message || 'Failed to fetch staff data. Please check connection.');
     } finally {
       setLoading(false);
     }
@@ -93,10 +113,6 @@ const AdminUsers = () => {
     setError('');
     setSuccess('');
     try {
-      // The API expects a specific argument order: name, email, password, role, phone, qualification, districtId, subdistrictId, villageId
-      // We will need to update the frontend api method signature to accept an object instead to easily support area_id and clinic_id.
-      // But wait! If I just pass the extra parameters it won't work unless I updated api.js. I should change api.js or do it here. Let's fix api.js register next.
-      // Assuming api.js is updated to take an object. Wait, let me just add the arguments in order: name, email, password, role, phone, qualification, districtId, subdistrictId, villageId, areaId, clinicId
       await api.register(
         regForm.name,
         regForm.email,
@@ -122,14 +138,26 @@ const AdminUsers = () => {
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = users.filter(u => {
+    const matchesSearch = 
+      (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase())) || 
+      (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (getSubdistrictName(u.subdistrict_id).toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (getVillageName(u.village_id).toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    const matchesTaluk = talukFilter === 'ALL' || u.subdistrict_id === talukFilter || String(u.subdistrict_id) === String(talukFilter);
+    return matchesSearch && matchesRole && matchesTaluk;
+  });
 
-  const getDistrictName = (id) => districts.find(d => d.id === id)?.name || 'N/A';
-  const getSubdistrictName = (id) => subdistricts.find(s => s.id === id)?.name || 'N/A';
-  const getVillageName = (id) => villages.find(v => v.id === id)?.name || 'N/A';
+  const getDistrictName = (id) => districts.find(d => d.id === id || String(d.id) === String(id))?.name || 'Erode';
+  const getSubdistrictName = (id) => subdistricts.find(s => s.id === id || String(s.id) === String(id))?.name || '—';
+  const getVillageName = (id) => villages.find(v => v.id === id || String(v.id) === String(id))?.name || '—';
+
+  // Helper for cascading villages
+  const getVillagesForSubdistrict = (subId) => {
+    if (!subId) return villages;
+    return villages.filter(v => v.subdistrict_id === subId || String(v.subdistrict_id) === String(subId));
+  };
 
   if (loading) {
     return (
@@ -148,7 +176,7 @@ const AdminUsers = () => {
             Staff & User Management
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginTop: '6px' }}>
-            Professional portal to register, assign, and manage healthcare providers.
+            Professional portal to register, assign, and manage healthcare providers across Erode District's 10 Taluks & 465 Villages.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowRegModal(true)} style={{ padding: '12px 24px', borderRadius: '12px' }}>
@@ -156,8 +184,8 @@ const AdminUsers = () => {
         </button>
       </div>
 
-      <div className="kpi-grid">
-        <div className="glass kpi-card glass-interactive">
+      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+        <div className="glass kpi-card glass-interactive" onClick={() => { setRoleFilter('ALL'); setTalukFilter('ALL'); }} style={{ cursor: 'pointer', border: roleFilter === 'ALL' && talukFilter === 'ALL' ? '2px solid var(--primary)' : '1px solid var(--border-card)' }}>
           <div className="kpi-header">
             <span>Total Staff</span>
             <div className="kpi-icon-wrapper" style={{ background: 'var(--info-bg)' }}>
@@ -166,7 +194,7 @@ const AdminUsers = () => {
           </div>
           <div className="kpi-val">{users.length}</div>
         </div>
-        <div className="glass kpi-card glass-interactive">
+        <div className="glass kpi-card glass-interactive" onClick={() => setRoleFilter('DOCTOR')} style={{ cursor: 'pointer', border: roleFilter === 'DOCTOR' ? '2px solid var(--warning)' : '1px solid var(--border-card)' }}>
           <div className="kpi-header">
             <span>Active Doctors</span>
             <div className="kpi-icon-wrapper" style={{ background: 'var(--warning-bg)' }}>
@@ -175,7 +203,7 @@ const AdminUsers = () => {
           </div>
           <div className="kpi-val">{users.filter(u => u.role === 'DOCTOR').length}</div>
         </div>
-        <div className="glass kpi-card glass-interactive">
+        <div className="glass kpi-card glass-interactive" onClick={() => setRoleFilter('NURSE')} style={{ cursor: 'pointer', border: roleFilter === 'NURSE' ? '2px solid var(--success)' : '1px solid var(--border-card)' }}>
           <div className="kpi-header">
             <span>Active Nurses</span>
             <div className="kpi-icon-wrapper" style={{ background: 'var(--success-bg)' }}>
@@ -183,6 +211,17 @@ const AdminUsers = () => {
             </div>
           </div>
           <div className="kpi-val">{users.filter(u => u.role === 'NURSE').length}</div>
+        </div>
+        <div className="glass kpi-card" style={{ border: '1px solid var(--border-card)' }}>
+          <div className="kpi-header">
+            <span>Territory Coverage</span>
+            <div className="kpi-icon-wrapper" style={{ background: 'rgba(14, 165, 233, 0.1)' }}>
+              <Building size={20} style={{ color: 'var(--primary)' }} />
+            </div>
+          </div>
+          <div className="kpi-val" style={{ color: 'var(--primary)', fontSize: '1.5rem' }}>
+            {subdistricts.filter(s => users.some(u => u.subdistrict_id === s.id || String(u.subdistrict_id) === String(s.id))).length} / {subdistricts.length || 10} <span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--text-secondary)' }}>Taluks</span>
+          </div>
         </div>
       </div>
 
@@ -193,41 +232,79 @@ const AdminUsers = () => {
       )}
 
       {error && (
-        <div className="badge badge-danger" style={{ display: 'block', padding: '14px', width: '100%', marginBottom: '20px', borderRadius: '12px', textTransform: 'none', textAlign: 'center' }}>
-          {error}
+        <div className="badge badge-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', width: '100%', marginBottom: '20px', borderRadius: '12px', textTransform: 'none' }}>
+          <span>{error}</span>
+          <button 
+            type="button"
+            onClick={loadData} 
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
-      <div className="glass" style={{ padding: '16px 20px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-        <Search size={20} style={{ color: 'var(--text-secondary)' }} />
-        <input 
-          type="text" 
-          placeholder="Search users by name or email..." 
-          className="form-control"
-          style={{ border: 'none', background: 'transparent', padding: '5px' }}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      {/* Role filter pills, Taluk Selector & Search bar */}
+      <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {['ALL', 'DOCTOR', 'NURSE', 'ADMIN'].map((r) => (
+            <button
+              key={r}
+              onClick={() => setRoleFilter(r)}
+              className={`btn btn-sm ${roleFilter === r ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ borderRadius: '20px', padding: '6px 16px', fontSize: '0.85rem' }}
+            >
+              {r === 'ALL' ? 'All Roles' : r === 'DOCTOR' ? 'Doctors' : r === 'NURSE' ? 'Nurses' : 'Admins'}
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <select 
+            className="form-control" 
+            style={{ minWidth: '200px', borderRadius: '12px', fontSize: '0.85rem', padding: '8px 14px', background: 'var(--card-bg, #fff)' }}
+            value={talukFilter}
+            onChange={(e) => setTalukFilter(e.target.value)}
+          >
+            <option value="ALL">All Taluks (Full District)</option>
+            {subdistricts.map(s => (
+              <option key={s.id} value={s.id}>{s.name} Taluk</option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="glass" style={{ flex: 1, minWidth: '250px', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '12px', borderRadius: '12px' }}>
+          <Search size={18} style={{ color: 'var(--text-secondary)' }} />
+          <input 
+            type="text" 
+            placeholder="Search staff by name, email, taluk, or village..." 
+            className="form-control"
+            style={{ border: 'none', background: 'transparent', padding: '4px', width: '100%' }}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
 
       <div className="glass table-container" style={{ padding: '15px' }}>
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
+              <th>Staff Member</th>
               <th>Role</th>
               <th>Qualification</th>
               <th>District</th>
-              <th>Subdistrict / Clinic (Doctor)</th>
-              <th>Village / Area (Nurse)</th>
+              <th>Subdistrict / Taluk</th>
+              <th>Village Scope</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-                  No users found.
+                <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                  No staff members match the current filter.
                 </td>
               </tr>
             ) : (
@@ -238,83 +315,59 @@ const AdminUsers = () => {
                   <tr key={user.id}>
                     <td>
                       <div style={{ fontWeight: 600 }}>{user.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{user.email}</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{user.email}</div>
                     </td>
                     <td>
                       <span className={`badge ${user.role === 'ADMIN' ? 'badge-danger' : user.role === 'DOCTOR' ? 'badge-warning' : 'badge-success'}`}>
                         {user.role}
                       </span>
                     </td>
-                    <td>{user.qualification || 'N/A'}</td>
+                    <td>{user.qualification || '—'}</td>
                     
                     {isEditing ? (
                       <>
                         <td>
                           <select 
                             className="form-control" 
-                            style={{ padding: '4px', fontSize: '0.85rem' }}
+                            style={{ padding: '6px', fontSize: '0.85rem' }}
                             value={editForm.district_id}
                             onChange={(e) => setEditForm({...editForm, district_id: e.target.value})}
-                            disabled={user.role !== 'ADMIN'}
                           >
-                            <option value="">None</option>
+                            <option value="">Select District</option>
                             {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                           </select>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <select 
-                              className="form-control" 
-                              style={{ padding: '4px', fontSize: '0.85rem' }}
-                              value={editForm.subdistrict_id}
-                              onChange={(e) => setEditForm({...editForm, subdistrict_id: e.target.value})}
-                              disabled={user.role !== 'DOCTOR' && user.role !== 'ADMIN'}
-                            >
-                              <option value="">No Subdistrict</option>
-                              {subdistricts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                            <select 
-                              className="form-control" 
-                              style={{ padding: '4px', fontSize: '0.85rem' }}
-                              value={editForm.clinic_id}
-                              onChange={(e) => setEditForm({...editForm, clinic_id: e.target.value})}
-                              disabled={user.role !== 'DOCTOR'}
-                            >
-                              <option value="">No Clinic</option>
-                              {clinics.map(c => <option key={c.id} value={c.id}>{c.clinic_name}</option>)}
-                            </select>
-                          </div>
+                          <select 
+                            className="form-control" 
+                            style={{ padding: '6px', fontSize: '0.85rem' }}
+                            value={editForm.subdistrict_id}
+                            onChange={(e) => setEditForm({...editForm, subdistrict_id: e.target.value, village_id: ''})}
+                          >
+                            <option value="">Select Taluk (Subdistrict)</option>
+                            {subdistricts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <select 
-                              className="form-control" 
-                              style={{ padding: '4px', fontSize: '0.85rem' }}
-                              value={editForm.village_id}
-                              onChange={(e) => setEditForm({...editForm, village_id: e.target.value})}
-                              disabled={user.role !== 'NURSE' && user.role !== 'ADMIN'}
-                            >
-                              <option value="">No Village</option>
-                              {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                            </select>
-                            <select 
-                              className="form-control" 
-                              style={{ padding: '4px', fontSize: '0.85rem' }}
-                              value={editForm.area_id}
-                              onChange={(e) => setEditForm({...editForm, area_id: e.target.value})}
-                              disabled={user.role !== 'NURSE'}
-                            >
-                              <option value="">No Area</option>
-                              {areas.filter(a => a.village_id === editForm.village_id).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </select>
-                          </div>
+                          <select 
+                            className="form-control" 
+                            style={{ padding: '6px', fontSize: '0.85rem' }}
+                            value={editForm.village_id}
+                            onChange={(e) => setEditForm({...editForm, village_id: e.target.value})}
+                            disabled={user.role !== 'NURSE'}
+                          >
+                            <option value="">{user.role === 'NURSE' ? (editForm.subdistrict_id ? 'Select Village' : 'Pick Taluk first') : 'Not Applicable (Doctor/Admin)'}</option>
+                            {getVillagesForSubdistrict(editForm.subdistrict_id).map(v => (
+                              <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                          </select>
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn btn-success" style={{ padding: '6px' }} onClick={() => handleSaveUser(user.id)}>
+                            <button className="btn btn-success" title="Save" style={{ padding: '6px 10px' }} onClick={() => handleSaveUser(user.id)}>
                               <Save size={16} />
                             </button>
-                            <button className="btn btn-danger" style={{ padding: '6px' }} onClick={handleCancelEdit}>
+                            <button className="btn btn-danger" title="Cancel" style={{ padding: '6px 10px' }} onClick={handleCancelEdit}>
                               <X size={16} />
                             </button>
                           </div>
@@ -322,18 +375,28 @@ const AdminUsers = () => {
                       </>
                     ) : (
                       <>
-                        <td>{getDistrictName(user.district_id)}</td>
                         <td>
-                          {getSubdistrictName(user.subdistrict_id)}
-                          {user.clinic_id && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Clinic: {clinics.find(c => c.id === user.clinic_id)?.clinic_name || 'N/A'}</div>}
+                          <span style={{ fontWeight: 500 }}>{getDistrictName(user.district_id)}</span>
                         </td>
                         <td>
-                          {getVillageName(user.village_id)}
-                          {user.area_id && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Area: {areas.find(a => a.id === user.area_id)?.name || 'N/A'}</div>}
+                          <span style={{ fontWeight: 500, color: user.subdistrict_id ? 'var(--primary)' : 'inherit' }}>
+                            {getSubdistrictName(user.subdistrict_id)}
+                          </span>
                         </td>
                         <td>
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleEditClick(user)}>
-                            <Edit2 size={14} /> Assign Location
+                          {user.role === 'NURSE' ? (
+                            <span className="badge badge-success" style={{ textTransform: 'none', fontWeight: 500 }}>
+                              {getVillageName(user.village_id)}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                              {user.role === 'DOCTOR' ? 'Taluk Jurisdiction' : 'District-wide'}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <button className="btn btn-secondary btn-sm" onClick={() => handleEditClick(user)} style={{ borderRadius: '8px' }}>
+                            <Edit2 size={13} /> Edit Location
                           </button>
                         </td>
                       </>
@@ -353,10 +416,10 @@ const AdminUsers = () => {
           background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
           justifyContent: 'center', zIndex: 1000, padding: '20px'
         }}>
-          <div className="glass" style={{ width: '100%', maxWidth: '600px', padding: '35px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="glass" style={{ width: '100%', maxWidth: '620px', padding: '35px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
               <h2 style={{ fontSize: '1.4rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Plus size={24} style={{ color: 'var(--primary)' }} /> Register Provider
+                <Plus size={24} style={{ color: 'var(--primary)' }} /> Register New Healthcare Provider
               </h2>
               <button className="btn btn-secondary" style={{ padding: '8px', borderRadius: '50%' }} onClick={() => setShowRegModal(false)}>
                 <X size={20} />
@@ -367,44 +430,44 @@ const AdminUsers = () => {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Full Name</label>
-                  <input type="text" className="form-control" required value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} placeholder="e.g., Dr. Jane Doe" />
+                  <input type="text" className="form-control" required value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} placeholder="e.g., Dr. Rajesh Kumar" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Email Address</label>
-                  <input type="email" className="form-control" required value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} placeholder="jane@clinic.org" />
+                  <input type="email" className="form-control" required value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} placeholder="e.g., sathyamangalam.doc@ruralcare.com" />
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Password</label>
-                  <input type="password" className="form-control" required value={regForm.password} onChange={(e) => setRegForm({...regForm, password: e.target.value})} placeholder="Secure password" />
+                  <input type="password" className="form-control" required value={regForm.password} onChange={(e) => setRegForm({...regForm, password: e.target.value})} placeholder="Minimum 6 characters" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phone Number</label>
-                  <input type="tel" className="form-control" value={regForm.phone} onChange={(e) => setRegForm({...regForm, phone: e.target.value})} placeholder="+91 9999999999" />
+                  <input type="tel" className="form-control" value={regForm.phone} onChange={(e) => setRegForm({...regForm, phone: e.target.value})} placeholder="+91 9876543210" />
                 </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Educational Qualification</label>
-                <input type="text" className="form-control" value={regForm.qualification} onChange={(e) => setRegForm({...regForm, qualification: e.target.value})} placeholder="e.g., MBBS, MD, B.Sc Nursing" />
+                <input type="text" className="form-control" value={regForm.qualification} onChange={(e) => setRegForm({...regForm, qualification: e.target.value})} placeholder="e.g., MBBS, MD / B.Sc Nursing" />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Role</label>
+                <label className="form-label">Staff Role</label>
                 <div style={{ display: 'flex', gap: '20px', marginTop: '10px', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid var(--border-card)' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="radio" name="role" value="ADMIN" checked={regForm.role === 'ADMIN'} onChange={(e) => setRegForm({...regForm, role: e.target.value, subdistrict_id: '', village_id: ''})} />
-                    <span style={{ fontWeight: regForm.role === 'ADMIN' ? 600 : 400, color: regForm.role === 'ADMIN' ? 'var(--danger)' : '' }}>District Admin</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="radio" name="role" value="DOCTOR" checked={regForm.role === 'DOCTOR'} onChange={(e) => setRegForm({...regForm, role: e.target.value, district_id: '', village_id: ''})} />
+                    <input type="radio" name="role" value="DOCTOR" checked={regForm.role === 'DOCTOR'} onChange={(e) => setRegForm({...regForm, role: e.target.value, village_id: ''})} />
                     <span style={{ fontWeight: regForm.role === 'DOCTOR' ? 600 : 400, color: regForm.role === 'DOCTOR' ? 'var(--warning)' : '' }}>Doctor</span>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="radio" name="role" value="NURSE" checked={regForm.role === 'NURSE'} onChange={(e) => setRegForm({...regForm, role: e.target.value, district_id: '', subdistrict_id: ''})} />
+                    <input type="radio" name="role" value="NURSE" checked={regForm.role === 'NURSE'} onChange={(e) => setRegForm({...regForm, role: e.target.value})} />
                     <span style={{ fontWeight: regForm.role === 'NURSE' ? 600 : 400, color: regForm.role === 'NURSE' ? 'var(--success)' : '' }}>Nurse</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="radio" name="role" value="ADMIN" checked={regForm.role === 'ADMIN'} onChange={(e) => setRegForm({...regForm, role: e.target.value, subdistrict_id: '', village_id: ''})} />
+                    <span style={{ fontWeight: regForm.role === 'ADMIN' ? 600 : 400, color: regForm.role === 'ADMIN' ? 'var(--danger)' : '' }}>District Admin</span>
                   </label>
                 </div>
               </div>
@@ -417,7 +480,7 @@ const AdminUsers = () => {
                 
                 {regForm.role === 'ADMIN' && (
                   <div className="form-group mb-0">
-                    <label className="form-label">Assign District (Global Coverage)</label>
+                    <label className="form-label">Assign District (Global District Coverage)</label>
                     <select className="form-control" value={regForm.district_id} onChange={(e) => setRegForm({...regForm, district_id: e.target.value})}>
                       <option value="">Select District</option>
                       {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -426,38 +489,58 @@ const AdminUsers = () => {
                 )}
 
                 {regForm.role === 'DOCTOR' && (
-                  <div className="form-group mb-0" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div className="form-group mb-0" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div>
-                      <label className="form-label">Assign Subdistrict (Regional Coverage)</label>
-                      <select className="form-control" value={regForm.subdistrict_id} onChange={(e) => setRegForm({...regForm, subdistrict_id: e.target.value})}>
-                        <option value="">Select Subdistrict</option>
-                        {subdistricts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="form-label">Assign Clinic (Specific Coverage)</label>
-                      <select className="form-control" value={regForm.clinic_id} onChange={(e) => setRegForm({...regForm, clinic_id: e.target.value})}>
-                        <option value="">Select Clinic</option>
-                        {clinics.map(c => <option key={c.id} value={c.id}>{c.clinic_name}</option>)}
+                      <label className="form-label">Assign Subdistrict / Taluk (Regional Coverage)</label>
+                      <select 
+                        className="form-control" 
+                        required 
+                        value={regForm.subdistrict_id} 
+                        onChange={(e) => {
+                          const dist = districts[0]?.id || '';
+                          setRegForm({...regForm, subdistrict_id: e.target.value, district_id: dist});
+                        }}
+                      >
+                        <option value="">Select Taluk (10 Official Taluks)</option>
+                        {subdistricts.map(s => <option key={s.id} value={s.id}>{s.name} Taluk</option>)}
                       </select>
                     </div>
                   </div>
                 )}
 
                 {regForm.role === 'NURSE' && (
-                  <div className="form-group mb-0" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div className="form-group mb-0" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div>
-                      <label className="form-label">Assign Village (Local Coverage)</label>
-                      <select className="form-control" value={regForm.village_id} onChange={(e) => setRegForm({...regForm, village_id: e.target.value})}>
-                        <option value="">Select Village</option>
-                        {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                      <label className="form-label">1. Select Taluk (Subdistrict)</label>
+                      <select 
+                        className="form-control" 
+                        required
+                        value={regForm.subdistrict_id} 
+                        onChange={(e) => {
+                          const dist = districts[0]?.id || '';
+                          setRegForm({...regForm, subdistrict_id: e.target.value, village_id: '', district_id: dist});
+                        }}
+                      >
+                        <option value="">Select Taluk first</option>
+                        {subdistricts.map(s => <option key={s.id} value={s.id}>{s.name} Taluk</option>)}
                       </select>
                     </div>
+
                     <div>
-                      <label className="form-label">Assign Area (Specific Coverage)</label>
-                      <select className="form-control" value={regForm.area_id} onChange={(e) => setRegForm({...regForm, area_id: e.target.value})}>
-                        <option value="">Select Area</option>
-                        {areas.filter(a => a.village_id === regForm.village_id).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      <label className="form-label">2. Assign Official Revenue Village (Local Coverage)</label>
+                      <select 
+                        className="form-control" 
+                        required
+                        value={regForm.village_id} 
+                        onChange={(e) => setRegForm({...regForm, village_id: e.target.value})}
+                        disabled={!regForm.subdistrict_id}
+                      >
+                        <option value="">
+                          {regForm.subdistrict_id ? 'Select Revenue Village' : '← Please select Taluk above first'}
+                        </option>
+                        {getVillagesForSubdistrict(regForm.subdistrict_id).map(v => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -465,7 +548,7 @@ const AdminUsers = () => {
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '14px', marginTop: '20px', fontSize: '1.05rem', borderRadius: '12px' }}>
-                Register Staff & Send Credentials
+                Register Staff & Create Account
               </button>
             </form>
           </div>

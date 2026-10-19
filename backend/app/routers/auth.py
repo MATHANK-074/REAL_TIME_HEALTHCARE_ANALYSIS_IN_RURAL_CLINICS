@@ -193,9 +193,14 @@ def login(login_data: UserLogin, db = Depends(get_db)):
     response_data = {
         "access_token": access_token,
         "token_type": "bearer",
+        "id": user["id"],
         "role": user["role"],
         "name": user["name"],
-        "email": user["email"]
+        "email": user["email"],
+        "village_id": user.get("village_id"),
+        "area_id": user.get("area_id"),
+        "subdistrict_id": user.get("subdistrict_id"),
+        "clinic_id": user.get("clinic_id")
     }
     if user.get("patient_id"):
         response_data["patient_id"] = user.get("patient_id")

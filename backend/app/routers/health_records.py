@@ -54,6 +54,8 @@ def create_health_record(
     if db_record.get("weight") is not None: db_record["weight"] = float(db_record["weight"])
     if db_record.get("height") is not None: db_record["height"] = float(db_record["height"])
     if db_record.get("temperature") is not None: db_record["temperature"] = float(db_record["temperature"])
+    if db_record.get("blood_sugar_fasting") is not None: db_record["blood_sugar_fasting"] = float(db_record["blood_sugar_fasting"])
+    if db_record.get("blood_sugar_random") is not None: db_record["blood_sugar_random"] = float(db_record["blood_sugar_random"])
     db_record["bmi"] = float(bmi) if bmi else None
     
     # Parse blood_pressure into systolic and diastolic for ML models

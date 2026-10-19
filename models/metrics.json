@@ -8,8 +8,8 @@
         "f1_score": 0.5933
     },
     "MATERNAL": {
-        "accuracy": 0.8,
-        "f1_score": 0.0
+        "accuracy": 0.931,
+        "f1_score": 0.8444
     },
     "HEART_DISEASE": {
         "accuracy": null,

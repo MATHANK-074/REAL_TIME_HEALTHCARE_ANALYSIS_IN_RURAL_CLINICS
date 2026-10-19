@@ -34,10 +34,12 @@ const AdminDashboard = () => {
   const loadDashboard = async () => {
     try {
       setLoading(true);
+      setError('');
       const res = await api.getAdminDashboard();
       setData(res);
     } catch (e) {
-      setError('Failed to fetch administrator metrics.');
+      console.error('Failed to load admin dashboard:', e);
+      setError(e.message || 'Failed to fetch administrator metrics.');
     } finally {
       setLoading(false);
     }
@@ -103,8 +105,16 @@ const AdminDashboard = () => {
   if (error || !data) {
     return (
       <div className="main-content" style={{ padding: '20px' }}>
-        <div className="badge badge-danger" style={{ display: 'block', padding: '14px', width: '100%', borderRadius: '12px', textTransform: 'none', textAlign: 'center' }}>
-          {error || 'No administrator data available.'}
+        <div className="badge badge-danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', width: '100%', borderRadius: '12px', textTransform: 'none' }}>
+          <span>{error || 'No administrator data available.'}</span>
+          <button 
+            type="button" 
+            onClick={loadDashboard} 
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '6px 16px', borderRadius: '8px', cursor: 'pointer' }}
+          >
+            Retry Loading
+          </button>
         </div>
       </div>
     );

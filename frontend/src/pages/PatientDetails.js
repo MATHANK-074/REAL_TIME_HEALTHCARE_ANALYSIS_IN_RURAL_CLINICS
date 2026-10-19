@@ -160,7 +160,7 @@ const PatientDetails = () => {
           <ArrowLeft size={16} /> Back
         </button>
         <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Registered in {patient.area?.name || 'Area'} / {patient.clinic?.clinic_name || 'Clinic'}
+          Registered in {typeof patient.village === 'object' ? (patient.village?.name || 'Village') : (patient.village || patient.village_name || 'Village')} / {typeof patient.district === 'object' ? (patient.district?.name || 'District') : (patient.district || 'District')}
         </span>
       </div>
 
@@ -195,7 +195,9 @@ const PatientDetails = () => {
           </div>
           <div>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Village / District</span>
-            <div style={{ fontWeight: 600, fontSize: '1.05rem', marginTop: '4px' }}>{patient.village || 'N/A'}, {patient.district || 'N/A'}</div>
+            <div style={{ fontWeight: 600, fontSize: '1.05rem', marginTop: '4px' }}>
+              {typeof patient.village === 'object' ? (patient.village?.name || 'N/A') : (patient.village || patient.village_name || 'N/A')}, {typeof patient.district === 'object' ? (patient.district?.name || 'N/A') : (patient.district || 'N/A')}
+            </div>
           </div>
           <div>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Assigned Nurse / Doctor</span>

@@ -135,14 +135,20 @@ def get_doctor_dashboard(
             })
 
     village_patient_counts = []
-    for vid in village_ids:
-        try:
-            v = db.villages.find_one({"_id": ObjectId(vid)})
-            count = db.patients.count_documents({"village_id": vid})
-            if count > 0 and v:
-                village_patient_counts.append({"location": v["name"], "patients": count})
-        except:
-            pass
+    if village_ids:
+        # Batch query patient counts for relevant villages using aggregation
+        valid_obj_ids = [ObjectId(str(vid)) for vid in village_ids if ObjectId.is_valid(str(vid))]
+        v_docs = list(db.villages.find({"_id": {"$in": valid_obj_ids}}, {"name": 1}))
+        v_name_map = {str(v["_id"]): v.get("name", "Unknown") for v in v_docs}
+        
+        village_pipe = [
+            {"$match": {"village_id": {"$in": [str(v) for v in village_ids]}}},
+            {"$group": {"_id": "$village_id", "count": {"$sum": 1}}}
+        ]
+        for item in db.patients.aggregate(village_pipe):
+            vid_str = str(item["_id"])
+            if vid_str in v_name_map:
+                village_patient_counts.append({"location": v_name_map[vid_str], "patients": item["count"]})
 
     return {
         "kpis": {
@@ -182,6 +188,7 @@ def get_admin_dashboard(
     risk_dist = {}
     disease_dist = {}
     high_risk_models = {}
+    high_risk_patient_ids = set()
     
     for pred in latest_predictions:
         rl = pred.get("risk_level")
@@ -190,16 +197,46 @@ def get_admin_dashboard(
         disease_dist[model_name] = disease_dist.get(model_name, 0) + 1
         if rl == 'HIGH':
             high_risk_models[model_name] = high_risk_models.get(model_name, 0) + 1
+            if pred.get("patient_id"):
+                high_risk_patient_ids.add(str(pred["patient_id"]))
+
+    # FAST IN-MEMORY AGGREGATION: Preload lookups in 3 single queries instead of 1,400+ loops!
+    all_subdistricts = list(db.subdistricts.find({}))
+    subdistrict_name_map = {str(s["_id"]): s.get("name", "Unknown") for s in all_subdistricts}
+    
+    all_villages = list(db.villages.find({}))
+    
+    # Preload all patients with their village_id in ONE query
+    all_patients = list(db.patients.find({}, {"_id": 1, "village_id": 1}))
+    
+    # Map village_id -> count of patients and list of patient IDs
+    village_patient_count = {}
+    village_patient_ids = {}
+    for p in all_patients:
+        vid = str(p.get("village_id", ""))
+        pid = str(p["_id"])
+        village_patient_count[vid] = village_patient_count.get(vid, 0) + 1
+        if vid not in village_patient_ids:
+            village_patient_ids[vid] = set()
+        village_patient_ids[vid].add(pid)
+
+    # Pre-group villages by subdistrict_id
+    subdistrict_villages_map = {}
+    for v in all_villages:
+        sid = str(v.get("subdistrict_id", ""))
+        if sid not in subdistrict_villages_map:
+            subdistrict_villages_map[sid] = []
+        subdistrict_villages_map[sid].append(str(v["_id"]))
 
     subdistricts_comparison = []
-    all_subdistricts = list(db.subdistricts.find({}))
     for s in all_subdistricts:
-        s_villages = list(db.villages.find({"subdistrict_id": str(s["_id"])}))
-        s_v_ids = [str(v["_id"]) for v in s_villages]
-        
-        s_patients = db.patients.count_documents({"village_id": {"$in": s_v_ids}})
-        s_patient_ids = [str(p["_id"]) for p in db.patients.find({"village_id": {"$in": s_v_ids}}, {"_id": 1})]
-        s_high_risk = sum(1 for p in latest_predictions if p.get("patient_id") in s_patient_ids and p.get("risk_level") == 'HIGH')
+        sid = str(s["_id"])
+        s_v_ids = subdistrict_villages_map.get(sid, [])
+        s_patients = sum(village_patient_count.get(vid, 0) for vid in s_v_ids)
+        s_high_risk = 0
+        for vid in s_v_ids:
+            p_ids = village_patient_ids.get(vid, set())
+            s_high_risk += len(p_ids.intersection(high_risk_patient_ids))
         
         subdistricts_comparison.append({
             "name": s.get("name"),
@@ -208,24 +245,19 @@ def get_admin_dashboard(
         })
 
     village_wise_risk = []
-    all_villages = list(db.villages.find({}))
     for v in all_villages:
         v_id_str = str(v["_id"])
-        v_patients = db.patients.count_documents({"village_id": v_id_str})
-        v_patient_ids = [str(p["_id"]) for p in db.patients.find({"village_id": v_id_str}, {"_id": 1})]
-        v_high_risk = sum(1 for p in latest_predictions if p.get("patient_id") in v_patient_ids and p.get("risk_level") == 'HIGH')
+        sub_id_str = str(v.get("subdistrict_id", ""))
+        v_pts = village_patient_count.get(v_id_str, 0)
+        v_p_ids = village_patient_ids.get(v_id_str, set())
+        v_high = len(v_p_ids.intersection(high_risk_patient_ids))
         
-        try:
-            parent_sub = db.subdistricts.find_one({"_id": ObjectId(v.get("subdistrict_id"))}) if v.get("subdistrict_id") else None
-        except:
-            parent_sub = None
-            
         village_wise_risk.append({
             "id": v_id_str,
             "name": v.get("name"),
-            "parent_name": parent_sub.get("name") if parent_sub else "Unknown",
-            "patients": v_patients,
-            "high_risk": v_high_risk
+            "parent_name": subdistrict_name_map.get(sub_id_str, "Unknown"),
+            "patients": v_pts,
+            "high_risk": v_high
         })
 
     six_months_ago = datetime.datetime.utcnow() - datetime.timedelta(days=180)
@@ -267,6 +299,77 @@ def get_admin_dashboard(
         "subdistrict_comparison": subdistricts_comparison,
         "village_wise_risk": village_wise_risk,
         "monthly_trend": monthly_trend
+    }
+
+
+@router.post("/simulate", status_code=status.HTTP_200_OK)
+def simulate_field_screening(
+    db: Database = Depends(get_db),
+    current_user: User = Depends(require_role(["ADMIN"]))
+):
+    """Simulate a live patient screening submitted by a field nurse from a remote village."""
+    patient = db.patients.find_one({})
+    if not patient:
+        # Create a sample patient if none exists
+        patient = {
+            "name": "Kavitha Selvam",
+            "patient_code": "P-ERD-1001",
+            "age": 34,
+            "gender": "FEMALE",
+            "village_id": None
+        }
+    
+    village_name = "Thalaiyampalayam"
+    subdistrict_name = "Perundurai"
+    if patient.get("village_id"):
+        try:
+            v_doc = db.villages.find_one({"_id": ObjectId(patient["village_id"])})
+            if v_doc:
+                village_name = v_doc.get("name", village_name)
+                s_doc = db.subdistricts.find_one({"_id": ObjectId(v_doc.get("subdistrict_id"))}) if v_doc.get("subdistrict_id") else None
+                if s_doc:
+                    subdistrict_name = s_doc.get("name", subdistrict_name)
+        except Exception:
+            pass
+
+    diseases = ["DIABETES", "HYPERTENSION", "MATERNAL"]
+    selected_disease = random.choice(diseases)
+    
+    risk_level = random.choices(["LOW", "MEDIUM", "HIGH"], weights=[0.5, 0.3, 0.2])[0]
+    prob = round(random.uniform(0.75, 0.96) if risk_level == "HIGH" else random.uniform(0.45, 0.74) if risk_level == "MEDIUM" else random.uniform(0.10, 0.44), 2)
+    
+    systolic = random.randint(110, 165)
+    diastolic = random.randint(70, 105)
+    glucose = random.randint(85, 230)
+    bmi = round(random.uniform(20.5, 32.0), 1)
+
+    now_iso = datetime.datetime.utcnow().isoformat()
+    
+    return {
+        "status": "success",
+        "patient": {
+            "name": patient.get("name", "Screened Patient"),
+            "patient_code": patient.get("patient_code", "RC-PAT-001"),
+            "village": village_name,
+            "subdistrict": subdistrict_name
+        },
+        "prediction": {
+            "id": str(ObjectId()),
+            "risk_level": risk_level,
+            "disease": selected_disease,
+            "probability": prob,
+            "predicted_at": now_iso
+        },
+        "health_record": {
+            "blood_pressure": f"{systolic}/{diastolic}",
+            "blood_glucose": glucose,
+            "bmi": bmi
+        },
+        "telemetry": {
+            "server_latency_ms": random.randint(12, 28),
+            "ingestion_rate_spm": round(random.uniform(4.5, 6.2), 1),
+            "offline_queue": 0
+        }
     }
 
 

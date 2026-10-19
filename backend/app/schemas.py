@@ -79,7 +79,7 @@ class Clinic(ClinicBase, MongoBaseModel):
 # User Schemas
 class UserBase(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     role: str
     phone: Optional[str] = None
     district_id: Optional[str] = None
@@ -95,7 +95,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
     district_id: Optional[str] = None
     subdistrict_id: Optional[str] = None
@@ -106,12 +106,12 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class User(UserBase, MongoBaseModel):
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    is_active: Optional[bool] = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class Token(BaseModel):

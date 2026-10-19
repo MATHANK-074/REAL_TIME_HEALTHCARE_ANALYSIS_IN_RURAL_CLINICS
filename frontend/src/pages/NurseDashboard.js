@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { 
   Search, 
@@ -8,7 +9,9 @@ import {
   CheckCircle,
   User,
   Navigation,
-  Calendar
+  Calendar,
+  FileText,
+  MapPin
 } from 'lucide-react';
 import FieldVisitModal from '../components/FieldVisitModal';
 
@@ -84,6 +87,7 @@ const renderVitalInput = (label, name, value, setter, type="number", step="1", r
 };
 
 const NurseDashboard = ({ user }) => {
+  const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState('');
@@ -94,6 +98,7 @@ const NurseDashboard = ({ user }) => {
   const [showVitalsModal, setShowVitalsModal] = useState(false);
   const [showFieldVisitModal, setShowFieldVisitModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [registeredPatient, setRegisteredPatient] = useState(null);
   
   // Field Visit State
   const [fieldVisits, setFieldVisits] = useState([]);
@@ -115,6 +120,7 @@ const NurseDashboard = ({ user }) => {
   const [regAllergies, setRegAllergies] = useState('None');
   const [regVillageId, setRegVillageId] = useState('');
   const [villages, setVillages] = useState([]);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Vitals Form State
   const [vWeight, setVWeight] = useState('');
@@ -144,16 +150,30 @@ const NurseDashboard = ({ user }) => {
     }
   }, [searchQuery]);
 
-  const loadVillages = useCallback(async () => {
-    if (user.role === 'ADMIN') {
-      try {
-        const data = await api.getVillages();
-        setVillages(data);
-      } catch (e) {
-        console.error('Failed to fetch villages', e);
+  const [profile, setProfile] = useState(user || null);
+
+  const loadUserProfile = useCallback(async () => {
+    try {
+      const me = await api.getMe();
+      if (me) {
+        setProfile(me);
+        if (me.village_id) {
+          setRegVillageId(me.village_id);
+        }
       }
+    } catch (e) {
+      console.error('Failed to fetch user profile', e);
     }
-  }, [user.role]);
+  }, []);
+
+  const loadVillages = useCallback(async () => {
+    try {
+      const data = await api.getVillages();
+      setVillages(data);
+    } catch (e) {
+      console.error('Failed to fetch villages', e);
+    }
+  }, []);
 
   const loadFieldVisits = useCallback(async () => {
     try {
@@ -191,19 +211,29 @@ const NurseDashboard = ({ user }) => {
     setVNotes('');
   };
 
+  // Initial load on mount
   useEffect(() => {
-    loadPatients();
+    loadUserProfile();
+    loadVillages();
     loadFieldVisits();
     loadFollowups();
-    loadVillages();
-  }, [loadPatients, loadFieldVisits, loadFollowups, loadVillages]);
+  }, [loadUserProfile, loadVillages, loadFieldVisits, loadFollowups]);
+
+  // Load patients when search query changes
+  useEffect(() => {
+    loadPatients();
+  }, [loadPatients]);
 
   const handleRegisterPatient = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setIsRegistering(true);
+
+    const activeVillage = regVillageId || profile?.village_id || user?.village_id;
+
     try {
-      // Area and Clinic are automatically assigned on backend from current user's profile
+      // Village is strictly fixed to the nurse's assigned village
       const newPatient = await api.createPatient({
         name: regName,
         age: parseInt(regAge),
@@ -214,13 +244,17 @@ const NurseDashboard = ({ user }) => {
         emergency_contact: regEmergency || null,
         existing_disease: regDisease || null,
         allergies: regAllergies || null,
-        village_id: user.role === 'ADMIN' ? regVillageId : user.village_id
+        village_id: activeVillage || null
       });
       
       const pEmail = `${newPatient.patient_code.toLowerCase()}@ruralcare.com`;
       const pPass = regPhone || 'password123';
       
-      setSuccess(`Patient registered successfully! Login: ${pEmail} | Password: ${pPass}`);
+      setRegisteredPatient({
+        ...newPatient,
+        email: pEmail,
+        password: pPass
+      });
       setShowRegModal(false);
       loadPatients();
       
@@ -230,9 +264,11 @@ const NurseDashboard = ({ user }) => {
       setRegPhone('');
       setRegAddress('');
       setRegEmergency('');
-      setRegVillageId('');
+      setRegVillageId(activeVillage || profile?.village_id || user?.village_id || '');
     } catch (err) {
       setError(err.message || 'Failed to register patient.');
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -322,15 +358,48 @@ const NurseDashboard = ({ user }) => {
           </p>
         </div>
         
-        <button className="btn btn-primary" onClick={() => setShowRegModal(true)}>
+        <button className="btn btn-primary" onClick={() => {
+          setError('');
+          setSuccess('');
+          setShowRegModal(true);
+        }}>
           <UserPlus size={18} />
           <span>Register Patient</span>
         </button>
       </div>
 
       {success && (
-        <div className="badge badge-success" style={{ display: 'block', padding: '14px', width: '100%', marginBottom: '20px', borderRadius: '12px', textTransform: 'none', textAlign: 'center' }}>
-          {success}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 20px',
+          background: '#f0fdf4',
+          border: '1px solid #86efac',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          color: '#15803d',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CheckCircle size={20} color="#16a34a" />
+            <span style={{ fontWeight: 600, fontSize: '0.92rem' }}>{success}</span>
+          </div>
+          <button 
+            onClick={() => setSuccess('')} 
+            style={{ 
+              background: 'transparent', 
+              border: 'none', 
+              cursor: 'pointer', 
+              color: '#15803d', 
+              fontWeight: 700, 
+              fontSize: '1.1rem',
+              padding: '0 8px' 
+            }}
+            title="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -475,34 +544,52 @@ const NurseDashboard = ({ user }) => {
                 return (
                   <tr key={p.id}>
                     <td>
-                      <strong style={{ color: 'var(--primary)' }}>{p.patient_code}</strong>
+                      <span 
+                        style={{ color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => navigate(`/patients/${p.id || p._id}`)}
+                        title="Click to view full health history & trends"
+                      >
+                        {p.patient_code}
+                      </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div 
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                        onClick={() => navigate(`/patients/${p.id || p._id}`)}
+                        title="Click to view patient profile & history"
+                      >
                         <User size={16} style={{ color: 'var(--text-secondary)' }} />
-                        <span>{p.name}</span>
+                        <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{p.name}</span>
                       </div>
                     </td>
                     <td>{p.age} years / {p.gender}</td>
                     <td>{p.phone || 'N/A'}</td>
-                    <td>{p.village?.name || 'N/A'}</td>
+                    <td>{typeof p.village === 'object' ? (p.village?.name || 'N/A') : (p.village || p.village_name || 'N/A')}</td>
                     <td>
                       <span className={`badge ${riskClass}`}>
                         {latestPred ? `${latestPred.risk_level} (${Math.round(latestPred.probability * 100)}%)` : 'NO DATA'}
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
                         <button 
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                          style={{ padding: '6px 10px', fontSize: '0.8rem' }}
+                          onClick={() => navigate(`/patients/${p.id || p._id}`)}
+                          title="View clinical history and trends"
+                        >
+                          <FileText size={14} style={{ color: 'var(--primary)' }} /> History
+                        </button>
+                        <button 
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 10px', fontSize: '0.8rem' }}
                           onClick={() => handleOpenVitals(p)}
                         >
                           <Heart size={14} style={{ color: '#ef4444' }} /> Log Vitals
                         </button>
                         <button 
                           className="btn btn-primary btn-sm"
-                          style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                          style={{ padding: '6px 10px', fontSize: '0.8rem' }}
                           onClick={() => handleOpenFieldVisit(p)}
                         >
                           <Navigation size={14} /> Start Visit
@@ -530,25 +617,38 @@ const NurseDashboard = ({ user }) => {
               <button className="btn btn-secondary" onClick={() => setShowRegModal(false)}>Cancel</button>
             </div>
             
+            {error && (
+              <div style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '0.88rem'
+              }}>
+                {error}
+              </div>
+            )}
+
             <form onSubmit={handleRegisterPatient}>
+              <div className="form-group">
+                <label className="form-label">Full Name <span style={{ color: '#ef4444' }}>*</span></label>
+                <input type="text" className="form-control" required value={regName} onChange={(e) => setRegName(e.target.value)} placeholder="Patient's full name" />
+              </div>
+
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Full Name</label>
-                  <input type="text" className="form-control" required value={regName} onChange={(e) => setRegName(e.target.value)} />
+                  <label className="form-label">Age <span style={{ color: '#ef4444' }}>*</span></label>
+                  <input type="number" className="form-control" required value={regAge} onChange={(e) => setRegAge(e.target.value)} placeholder="Age in years" />
                 </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Age</label>
-                    <input type="number" className="form-control" required value={regAge} onChange={(e) => setRegAge(e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Gender</label>
-                    <select className="form-control" value={regGender} onChange={(e) => setRegGender(e.target.value)}>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+                <div className="form-group">
+                  <label className="form-label">Gender</label>
+                  <select className="form-control" value={regGender} onChange={(e) => setRegGender(e.target.value)}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
               </div>
 
@@ -593,27 +693,112 @@ const NurseDashboard = ({ user }) => {
                 </div>
               </div>
 
-              {user.role === 'ADMIN' && (
-                <div className="form-group">
-                  <label className="form-label">Assign to Village</label>
-                  <select 
-                    className="form-control" 
-                    required 
-                    value={regVillageId} 
-                    onChange={(e) => setRegVillageId(e.target.value)}
-                  >
-                    <option value="">Select Village</option>
-                    {villages.map(v => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
+              {/* Village Assignment (Fixed to Nurse's Assigned Village) */}
+              <div className="form-group" style={{ marginTop: '14px' }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600 }}>
+                  <MapPin size={16} color="var(--primary)" /> Assigned Village Jurisdiction <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: 700 }}>(Fixed Jurisdiction)</span>
+                </label>
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  background: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                }}>
+                  <strong style={{ color: '#166534', fontSize: '1rem' }}>
+                    {villages.find(v => String(v.id) === String(profile?.village_id || user?.village_id))?.name || user?.village_name || profile?.village_name || 'Perundurai East'}
+                  </strong>
+                  <span className="badge badge-success" style={{ padding: '6px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
+                    ASSIGNED
+                  </span>
                 </div>
-              )}
+              </div>
 
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px', marginTop: '15px' }}>
-                Create Patient Profile
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                style={{ width: '100%', padding: '12px', marginTop: '15px' }}
+                disabled={isRegistering}
+              >
+                {isRegistering ? 'Creating Profile...' : 'Create Patient Profile'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REGISTRATION SUCCESS DIALOG */}
+      {registeredPatient && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1100, padding: '20px'
+        }}>
+          <div className="glass" style={{
+            width: '100%', maxWidth: '520px', padding: '32px', textAlign: 'center',
+            borderRadius: '16px', background: '#ffffff', boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: '#dcfce7', color: '#16a34a', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
+            }}>
+              <CheckCircle size={36} />
+            </div>
+
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}>
+              Patient Profile Created!
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '24px' }}>
+              <strong style={{ color: 'var(--primary)' }}>{registeredPatient.name}</strong> has been registered with ID <strong style={{ color: '#0ea5e9' }}>{registeredPatient.patient_code}</strong>.
+            </p>
+
+            {/* Credentials Card */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1.5px dashed #cbd5e1',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              textAlign: 'left',
+              marginBottom: '24px'
+            }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', color: '#64748b', marginBottom: '10px' }}>
+                Patient Portal Credentials
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ color: '#64748b', fontSize: '0.88rem' }}>Username / Email:</span>
+                <strong style={{ color: '#1e293b', fontSize: '0.9rem', fontFamily: 'monospace' }}>{registeredPatient.email}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b', fontSize: '0.88rem' }}>Default Password:</span>
+                <strong style={{ color: '#1e293b', fontSize: '0.9rem', fontFamily: 'monospace' }}>{registeredPatient.password}</strong>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '12px' }}
+                onClick={() => setRegisteredPatient(null)}
+              >
+                Close
+              </button>
+              <button 
+                className="btn btn-primary" 
+                style={{ flex: 1, padding: '12px' }}
+                onClick={() => {
+                  const p = registeredPatient;
+                  setRegisteredPatient(null);
+                  handleOpenVitals(p);
+                }}
+              >
+                <Heart size={16} /> Log Vitals Now
+              </button>
+            </div>
           </div>
         </div>
       )}

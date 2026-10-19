@@ -5,11 +5,11 @@ import os
 import traceback
 
 try:
-    from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push
+    from .routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push, reports
 except (ImportError, ValueError):
     import sys
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-    from app.routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push
+    from app.routers import auth, users, patients, health_records, predictions, alerts, followups, locations, dashboard, field_visits, notifications, patient_portal, clinical_reviews, push, reports
 
 app = FastAPI(
     title="RuralCare AI - Healthcare Risk Prediction API",
@@ -56,6 +56,7 @@ app.include_router(push.router, prefix="/api/push", tags=["push"])
 app.include_router(notifications.router, prefix="/api")
 app.include_router(patient_portal.router, prefix="/api")
 app.include_router(clinical_reviews.router, prefix="/api")
+app.include_router(reports.router, prefix="/api")
 
 # Ensure indexes for notifications collection exist
 @app.on_event("startup")

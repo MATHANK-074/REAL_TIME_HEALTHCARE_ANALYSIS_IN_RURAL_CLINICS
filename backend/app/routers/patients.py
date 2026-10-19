@@ -105,6 +105,56 @@ def serialize_doc(doc):
         doc["id"] = str(doc["_id"])
     return doc
 
+def enrich_patient(patient: dict, db: Database):
+    if not patient:
+        return patient
+    v = None
+    if patient.get("village_id"):
+        v = find_by_id(db.villages, patient["village_id"])
+        if v:
+            v_name = v.get("name")
+            patient["village"] = {"name": v_name, "id": str(v.get("_id"))}
+            patient["village_name"] = v_name
+            if v.get("subdistrict_id"):
+                sub = find_by_id(db.subdistricts, v.get("subdistrict_id"))
+                if sub:
+                    patient["subdistrict"] = sub.get("name")
+                    if sub.get("district_id"):
+                        dist = find_by_id(db.districts, sub.get("district_id"))
+                        if dist:
+                            patient["district"] = dist.get("name")
+                    
+    if patient.get("area_id"):
+        a = find_by_id(db.areas, patient["area_id"])
+        if a:
+            patient["area_name"] = a.get("name")
+            
+    if patient.get("clinic_id"):
+        c = find_by_id(db.clinics, patient["clinic_id"])
+        if c:
+            patient["clinic_name"] = c.get("clinic_name")
+            
+    # Enrich with Assigned Nurse / Doctor
+    nurse_query = {"role": "NURSE"}
+    if patient.get("area_id"):
+        nurse_query["area_id"] = str(patient["area_id"])
+    elif patient.get("village_id"):
+        nurse_query["village_id"] = str(patient["village_id"])
+    nurses = list(db.users.find(nurse_query))
+    if nurses:
+        patient["assigned_nurse"] = ", ".join([n.get("name") for n in nurses if n.get("name")])
+        
+    doctor_query = {"role": "DOCTOR"}
+    if patient.get("clinic_id"):
+        doctor_query["clinic_id"] = str(patient["clinic_id"])
+    elif v and v.get("subdistrict_id"):
+        doctor_query["subdistrict_id"] = str(v.get("subdistrict_id"))
+    doctors = list(db.users.find(doctor_query))
+    if doctors:
+        patient["assigned_doctor"] = ", ".join([d.get("name") for d in doctors if d.get("name")])
+        
+    return patient
+
 @router.get("", response_model=List[PatientSchema])
 def get_patients(
     search: Optional[str] = None, 
@@ -175,7 +225,7 @@ def get_patients(
         ]
         
     patients = list(db.patients.find(filter_query).sort("_id", -1))
-    return [serialize_doc(p) for p in patients]
+    return [serialize_doc(enrich_patient(p, db)) for p in patients]
 
 def find_by_id(collection, doc_id):
     if not doc_id:
@@ -197,52 +247,7 @@ def get_patient(patient_id: str, db: Database = Depends(get_db), current_user: U
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
-    
-    v = None
-    # Enrich with Location Names
-    if patient.get("village_id"):
-        v = find_by_id(db.villages, patient["village_id"])
-        if v:
-            patient["village"] = v.get("name")
-            if v.get("subdistrict_id"):
-                sub = find_by_id(db.subdistricts, v.get("subdistrict_id"))
-                if sub:
-                    patient["subdistrict"] = sub.get("name")
-                    if sub.get("district_id"):
-                        dist = find_by_id(db.districts, sub.get("district_id"))
-                        if dist:
-                            patient["district"] = dist.get("name")
-                    
-    if patient.get("area_id"):
-        a = find_by_id(db.areas, patient["area_id"])
-        if a:
-            patient["area_name"] = a.get("name")
-            
-    if patient.get("clinic_id"):
-        c = find_by_id(db.clinics, patient["clinic_id"])
-        if c:
-            patient["clinic_name"] = c.get("clinic_name")
-            
-    # Enrich with Assigned Nurse / Doctor
-    nurse_query = {"role": "NURSE"}
-    if patient.get("area_id"):
-        nurse_query["area_id"] = str(patient["area_id"])
-    elif patient.get("village_id"):
-        nurse_query["village_id"] = str(patient["village_id"])
-    nurses = list(db.users.find(nurse_query))
-    if nurses:
-        patient["assigned_nurse"] = ", ".join([n.get("name") for n in nurses])
-        
-    doctor_query = {"role": "DOCTOR"}
-    if patient.get("clinic_id"):
-        doctor_query["clinic_id"] = str(patient["clinic_id"])
-    elif v and v.get("subdistrict_id"):
-        doctor_query["subdistrict_id"] = str(v.get("subdistrict_id"))
-    doctors = list(db.users.find(doctor_query))
-    if doctors:
-        patient["assigned_doctor"] = ", ".join([d.get("name") for d in doctors])
-        
-    return serialize_doc(patient)
+    return serialize_doc(enrich_patient(patient, db))
 
 @router.post("", response_model=PatientSchema, status_code=status.HTTP_201_CREATED)
 def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -253,9 +258,22 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
             detail="Only Nurses and Admins can register patients"
         )
         
-    target_village_id = patient_data.village_id
     if current_user.get("role") == 'NURSE':
-        target_village_id = current_user.get("village_id")
+        assigned_v = current_user.get("village_id")
+        if not assigned_v:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nurse does not have an assigned village configured."
+            )
+        # Strictly enforce nurse's authorized village
+        if patient_data.village_id and str(patient_data.village_id) != str(assigned_v):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Nurses are only authorized to register patients in their specifically assigned village."
+            )
+        target_village_id = str(assigned_v)
+    else:
+        target_village_id = patient_data.village_id or current_user.get("village_id")
         
     if not target_village_id:
         raise HTTPException(
@@ -327,39 +345,7 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
     
     log_audit(db, str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys")), "CREATE_PATIENT", "patients", str(db_patient["_id"]), f"Registered patient {db_patient['name']} ({patient_code})")
     
-    # Enrich with Location and Assigned Staff before returning
-    v = db.villages.find_one({"_id": ObjectId(db_patient["village_id"])}) if db_patient.get("village_id") else None
-    if v:
-        db_patient["village"] = v.get("name")
-        if v.get("subdistrict_id"):
-            sub = db.subdistricts.find_one({"_id": ObjectId(v["subdistrict_id"])})
-            if sub:
-                db_patient["subdistrict"] = sub.get("name")
-                if sub.get("district_id"):
-                    dist = db.districts.find_one({"_id": ObjectId(sub["district_id"])})
-                    if dist: db_patient["district"] = dist.get("name")
-    
-    if db_patient.get("area_id"):
-        a = db.areas.find_one({"_id": ObjectId(db_patient["area_id"])})
-        if a: db_patient["area_name"] = a.get("name")
-        
-    if db_patient.get("clinic_id"):
-        c = db.clinics.find_one({"_id": ObjectId(db_patient["clinic_id"])})
-        if c: db_patient["clinic_name"] = c.get("clinic_name")
-        
-    nurse_query = {"role": "NURSE"}
-    if db_patient.get("area_id"): nurse_query["area_id"] = str(db_patient["area_id"])
-    elif db_patient.get("village_id"): nurse_query["village_id"] = str(db_patient["village_id"])
-    nurses = list(db.users.find(nurse_query))
-    if nurses: db_patient["assigned_nurse"] = ", ".join([n.get("name") for n in nurses])
-        
-    doctor_query = {"role": "DOCTOR"}
-    if db_patient.get("clinic_id"): doctor_query["clinic_id"] = str(db_patient["clinic_id"])
-    elif v and v.get("subdistrict_id"): doctor_query["subdistrict_id"] = str(v.get("subdistrict_id"))
-    doctors = list(db.users.find(doctor_query))
-    if doctors: db_patient["assigned_doctor"] = ", ".join([d.get("name") for d in doctors])
-    
-    return serialize_doc(db_patient)
+    return serialize_doc(enrich_patient(db_patient, db))
 
 @router.put("/{patient_id}", response_model=PatientSchema)
 def update_patient(patient_id: str, patient_data: PatientCreate, db: Database = Depends(get_db), current_user: User = Depends(get_current_user)):
