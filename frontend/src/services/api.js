@@ -173,12 +173,17 @@ export const api = {
     return handleResponse(res, 'Failed to fetch administrator metrics');
   },
 
+  getRecentScreenings: async () => {
+    const res = await fetchWithTimeout(`${BASE_URL}/dashboard/recent-screenings`, { headers: getHeaders() });
+    return handleResponse(res, 'Failed to fetch recent screenings');
+  },
+
   simulateScreening: async () => {
-    const res = await fetch(`${BASE_URL}/dashboard/simulate`, {
+    const res = await fetchWithTimeout(`${BASE_URL}/dashboard/simulate`, {
       method: 'POST',
       headers: getHeaders(),
     });
-    return handleResponse(res, 'Failed to trigger simulation');
+    return handleResponse(res, 'Failed to fetch field screening');
   },
 
   // Predictions

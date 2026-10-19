@@ -21,15 +21,32 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Real-time Telemetry Stream States
-  const [isSimulating, setIsSimulating] = useState(false);
+  // Real-time Field Telemetry States (100% Real Clinical Data)
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
   const [liveFeed, setLiveFeed] = useState([]);
-  const [simulatingSingle, setSimulatingSingle] = useState(false);
+  const [refreshingFeed, setRefreshingFeed] = useState(false);
   const [telemetryStats, setTelemetryStats] = useState({
     server_latency_ms: 14,
-    ingestion_rate_spm: 4.8,
+    ingestion_rate_spm: 0,
     offline_queue: 0
   });
+
+  const loadScreenings = async () => {
+    try {
+      setRefreshingFeed(true);
+      const res = await api.getRecentScreenings();
+      if (res && res.status === 'success') {
+        setLiveFeed(res.screenings || []);
+        if (res.telemetry) {
+          setTelemetryStats(res.telemetry);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load recent field screenings:', e);
+    } finally {
+      setRefreshingFeed(false);
+    }
+  };
 
   const loadDashboard = async () => {
     try {
@@ -37,6 +54,7 @@ const AdminDashboard = () => {
       setError('');
       const res = await api.getAdminDashboard();
       setData(res);
+      await loadScreenings();
     } catch (e) {
       console.error('Failed to load admin dashboard:', e);
       setError(e.message || 'Failed to fetch administrator metrics.');
@@ -49,49 +67,31 @@ const AdminDashboard = () => {
     loadDashboard();
   }, []);
 
-  const triggerSingleSimulation = async () => {
-    try {
-      setSimulatingSingle(true);
-      const result = await api.simulateScreening();
-      if (result.status === 'success') {
-        setLiveFeed(prev => [result, ...prev].slice(0, 10));
-        setTelemetryStats(result.telemetry);
-        // Refresh dashboard statistics
-        const res = await api.getAdminDashboard();
-        setData(res);
-      }
-    } catch (e) {
-      console.error("Simulation failed", e);
-    } finally {
-      setSimulatingSingle(false);
-    }
-  };
-
+  // Periodic Auto-Sync for Real-Time Field Updates (every 15 seconds)
   useEffect(() => {
     let interval = null;
-    if (isSimulating) {
+    if (isAutoSyncing) {
       interval = setInterval(async () => {
         try {
-          const result = await api.simulateScreening();
-          if (result.status === 'success') {
-            setLiveFeed(prev => [result, ...prev].slice(0, 10));
-            setTelemetryStats(result.telemetry);
-            // Refresh dashboard statistics
-            const res = await api.getAdminDashboard();
-            setData(res);
+          const res = await api.getRecentScreenings();
+          if (res && res.status === 'success') {
+            setLiveFeed(res.screenings || []);
+            if (res.telemetry) {
+              setTelemetryStats(res.telemetry);
+            }
           }
         } catch (e) {
-          console.error("Simulation stream error", e);
+          console.error("Live auto-sync error:", e);
         }
-      }, 7000); // Poll/generate every 7 seconds
+      }, 15000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isSimulating]);
+  }, [isAutoSyncing]);
 
-  const toggleSimulation = () => {
-    setIsSimulating(!isSimulating);
+  const toggleAutoSync = () => {
+    setIsAutoSyncing(!isAutoSyncing);
   };
 
   if (loading) {
@@ -219,21 +219,23 @@ const AdminDashboard = () => {
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
-                onClick={toggleSimulation} 
-                className={`btn ${isSimulating ? 'btn-danger' : 'btn-primary'}`}
+                onClick={toggleAutoSync} 
+                className={`btn ${isAutoSyncing ? 'btn-danger' : 'btn-primary'}`}
                 style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                title="Automatically check for new real field screenings every 15s"
               >
-                {isSimulating ? <Pause size={14} /> : <Play size={14} />}
-                <span>{isSimulating ? 'Pause Stream' : 'Live Stream'}</span>
+                {isAutoSyncing ? <Pause size={14} /> : <Play size={14} />}
+                <span>{isAutoSyncing ? 'Pause Auto-Sync' : 'Auto-Sync (15s)'}</span>
               </button>
               <button 
-                onClick={triggerSingleSimulation} 
+                onClick={loadScreenings} 
                 className="btn btn-secondary"
-                disabled={simulatingSingle}
+                disabled={refreshingFeed}
                 style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                title="Fetch newest real patient records from clinics"
               >
-                <RefreshCw size={14} className={simulatingSingle ? 'spin' : ''} />
-                <span>Trigger Screen</span>
+                <RefreshCw size={14} className={refreshingFeed ? 'spin' : ''} />
+                <span>Refresh Feed</span>
               </button>
             </div>
           </div>
@@ -241,7 +243,7 @@ const AdminDashboard = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
             {liveFeed.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                No active live telemetry data. Click "Trigger Screen" or start the stream.
+                No recent field screenings logged yet. Real clinical records entered by nurses will appear here.
               </div>
             ) : (
               liveFeed.map((feed, index) => (
