@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 // Components
 import Sidebar from './components/Sidebar';
+import { clearPatientCache } from './services/offlineStorage';
 
 // Pages
 import Login from './pages/Login';
@@ -41,6 +42,9 @@ function App() {
   };
 
   const handleLogout = () => {
+    if (currentUser) {
+      clearPatientCache(currentUser.id || currentUser._id);
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setCurrentUser(null);

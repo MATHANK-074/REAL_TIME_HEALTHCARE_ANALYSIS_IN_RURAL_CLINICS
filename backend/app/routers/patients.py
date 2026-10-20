@@ -163,6 +163,12 @@ def get_patients(
     current_user: User = Depends(get_current_user)
 ):
     """Retrieve patients accessible to the current user (based on role/assigned location)."""
+    if current_user.get("role") == "PATIENT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Patients cannot list other patient records."
+        )
+
     filter_query = {}
     
     # 1. Enforce Role-Based Area Restrictions

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -10,10 +10,23 @@ import {
   ShieldAlert,
   MapPin
 } from 'lucide-react';
+import { getLanguage, TRANSLATIONS } from '../utils/patientTranslations';
+import { clearPatientCache } from '../services/offlineStorage';
 
 const Sidebar = ({ user, onLogout }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [lang, setLang] = useState(getLanguage());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = getLanguage();
+      if (current !== lang) setLang(current);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lang]);
+
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.en;
 
   const getLinks = () => {
     if (!user) return [];
@@ -37,13 +50,13 @@ const Sidebar = ({ user, onLogout }) => {
       );
     } else if (user.role === 'PATIENT') {
       links.push(
-        { path: '/patient/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { path: '/patient/health', label: 'My Health', icon: Activity },
-        { path: '/patient/history', label: 'Health History', icon: Calendar },
-        { path: '/patient/predictions', label: 'AI Assessment', icon: Activity },
-        { path: '/patient/followups', label: 'Follow-ups', icon: Calendar },
-        { path: '/patient/notifications', label: 'Notifications', icon: Bell },
-        { path: '/patient/profile', label: 'My Profile', icon: Users }
+        { path: '/patient/dashboard', label: t.dashboard, icon: LayoutDashboard },
+        { path: '/patient/health', label: t.myHealth, icon: Activity },
+        { path: '/patient/history', label: t.history, icon: Calendar },
+        { path: '/patient/predictions', label: t.aiPredictions, icon: Activity },
+        { path: '/patient/followups', label: t.followups, icon: Calendar },
+        { path: '/patient/notifications', label: t.notifications, icon: Bell },
+        { path: '/patient/profile', label: t.profile, icon: Users }
       );
     }
 
@@ -53,6 +66,9 @@ const Sidebar = ({ user, onLogout }) => {
   const links = getLinks();
 
   const handleLogoutClick = () => {
+    if (user) {
+      clearPatientCache(user.id || user._id);
+    }
     onLogout();
     navigate('/login');
   };
@@ -101,7 +117,7 @@ const Sidebar = ({ user, onLogout }) => {
           style={{ width: '100%', padding: '10px' }}
         >
           <LogOut size={18} />
-          <span>Logout</span>
+          <span>{user?.role === 'PATIENT' ? t.logout : 'Logout'}</span>
         </button>
       </div>
     </aside>

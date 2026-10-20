@@ -447,4 +447,48 @@ export const clearUserCache = async (userId) => {
     clearStoreForUser('cached_villages'),
     clearStoreForUser('cached_followups')
   ]);
+  clearPatientCache(userId);
 };
+
+// =========================================================================
+// PATIENT PORTAL READ-ONLY OFFLINE CACHING
+// =========================================================================
+
+export const cachePatientData = (userId, section, data) => {
+  if (!userId || !section) return;
+  try {
+    const payload = {
+      cachedAt: new Date().toISOString(),
+      data
+    };
+    localStorage.setItem(`ruralcare_patient_${userId}_${section}`, JSON.stringify(payload));
+  } catch (e) {
+    console.warn('Failed to cache patient data offline:', e);
+  }
+};
+
+export const getCachedPatientData = (userId, section) => {
+  if (!userId || !section) return null;
+  try {
+    const raw = localStorage.getItem(`ruralcare_patient_${userId}_${section}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+};
+
+export const clearPatientCache = (userId) => {
+  if (!userId) return;
+  try {
+    const prefix = `ruralcare_patient_${userId}_`;
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith(prefix)) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch (e) {
+    console.warn('Failed to clear patient cache:', e);
+  }
+};
+

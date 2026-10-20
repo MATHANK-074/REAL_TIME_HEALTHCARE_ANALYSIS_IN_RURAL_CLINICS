@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.database import Database
 from typing import List
 from datetime import datetime
+from bson import ObjectId
 
 from ..schemas import Notification, User
 from ..services.notification_service import create_notification
@@ -17,8 +18,24 @@ def serialize(doc):
 
 def get_notif_filter(current_user: User):
     if current_user.get("role") == "PATIENT":
-        return {"patient_id": str(current_user.get("patient_id"))}
-    return {"recipient_id": str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id"))}
+        pid_str = str(current_user.get("patient_id") or "")
+        uid_str = str(current_user.get("id") or current_user.get("_id") or "")
+        clauses = []
+        if pid_str:
+            clauses.append({"patient_id": pid_str})
+            clauses.append({"recipient_id": pid_str})
+            if ObjectId.is_valid(pid_str):
+                clauses.append({"patient_id": ObjectId(pid_str)})
+        if uid_str:
+            clauses.append({"recipient_id": uid_str})
+            if ObjectId.is_valid(uid_str):
+                clauses.append({"recipient_id": ObjectId(uid_str)})
+        return {"$or": clauses} if clauses else {"patient_id": "__none__"}
+    uid = str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id") or current_user.get("_id") or "")
+    clauses = [{"recipient_id": uid}]
+    if ObjectId.is_valid(uid):
+        clauses.append({"recipient_id": ObjectId(uid)})
+    return {"$or": clauses}
 
 @router.get("/", response_model=List[Notification])
 def list_notifications(skip: int = 0, limit: int = 20,
