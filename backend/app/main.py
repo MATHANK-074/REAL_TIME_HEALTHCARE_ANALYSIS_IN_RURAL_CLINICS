@@ -1,3 +1,4 @@
+import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,6 +65,9 @@ async def startup_indexes():
     from .database import get_db
     for db in get_db():
         db.notifications.create_index([("recipient_id", 1), ("is_read", 1), ("created_at", -1)])
+        db.patients.create_index("idempotency_key", unique=True, sparse=True)
+        db.health_records.create_index("idempotency_key", unique=True, sparse=True)
+        db.field_visits.create_index("idempotency_key", unique=True, sparse=True)
         break
 
 
@@ -73,5 +77,5 @@ def health_check():
     return {
         "status": "healthy",
         "environment": os.getenv("ENV", "development"),
-        "timestamp": os.getenv("CURRENT_TIME", "2026-08-07T07:05:00")
+        "timestamp": datetime.datetime.utcnow().isoformat()
     }

@@ -206,8 +206,8 @@ def get_admin_dashboard(
     
     all_villages = list(db.villages.find({}))
     
-    # Preload all patients with their village_id in ONE query
-    all_patients = list(db.patients.find({}, {"_id": 1, "village_id": 1}))
+    # Preload all patients with their village_id and created_at in ONE query
+    all_patients = list(db.patients.find({}, {"_id": 1, "village_id": 1, "created_at": 1}))
     
     # Map village_id -> count of patients and list of patient IDs
     village_patient_count = {}
@@ -244,6 +244,15 @@ def get_admin_dashboard(
             "high_risk": s_high_risk
         })
 
+    # Display all 10 official revenue taluks in configured canonical order
+    OFFICIAL_TALUK_ORDER = [
+        "Erode", "Perundurai", "Modakkurichi", "Kodumudi",
+        "Gobichettipalayam", "Sathyamangalam", "Bhavani", "Anthiyur",
+        "Thalavadi", "Nambiyur"
+    ]
+    taluk_order_map = {name.lower(): idx for idx, name in enumerate(OFFICIAL_TALUK_ORDER)}
+    subdistricts_comparison.sort(key=lambda item: taluk_order_map.get((item.get("name") or "").lower(), 99))
+
     village_wise_risk = []
     for v in all_villages:
         v_id_str = str(v["_id"])
@@ -257,20 +266,44 @@ def get_admin_dashboard(
             "name": v.get("name"),
             "parent_name": subdistrict_name_map.get(sub_id_str, "Unknown"),
             "patients": v_pts,
-            "high_risk": v_high
+            "high_risk": v_high,
+            "is_official": v.get("is_official", True),
+            "is_legacy": v.get("is_legacy", False)
         })
 
-    six_months_ago = datetime.datetime.utcnow() - datetime.timedelta(days=180)
-    pipeline_monthly = [
-        {"$match": {"created_at": {"$gte": six_months_ago}}},
-        {"$project": {
-            "month": {"$dateToString": {"format": "%b %Y", "date": "$created_at"}}
-        }},
-        {"$group": {"_id": "$month", "count": {"$sum": 1}}}
-    ]
-    monthly_registrations = list(db.patients.aggregate(pipeline_monthly))
-    # Sorting roughly by date could be complex with string group, but let's leave it simple
-    monthly_trend = [{"month": r["_id"], "count": r["count"]} for r in monthly_registrations]
+    # Calendar month calculation for past 6 months up to current month (handling year boundaries)
+    now = datetime.datetime.utcnow()
+    curr_year = now.year
+    curr_month = now.month
+    months = []
+    for offset in range(5, -1, -1):
+        m = curr_month - offset
+        y = curr_year
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(datetime.datetime(y, m, 1))
+
+    start_date = months[0]
+    month_labels = [m.strftime("%b %Y") for m in months]
+    reg_map = {label: 0 for label in month_labels}
+
+    for p in all_patients:
+        d = p.get("created_at")
+        if not d and "_id" in p and hasattr(p["_id"], "generation_time"):
+            try:
+                d = p["_id"].generation_time.replace(tzinfo=None)
+            except Exception:
+                d = None
+        if isinstance(d, datetime.datetime):
+            if d.tzinfo:
+                d = d.replace(tzinfo=None)
+            if d >= start_date:
+                m_str = d.strftime("%b %Y")
+                if m_str in reg_map:
+                    reg_map[m_str] += 1
+
+    monthly_trend = [{"month": m, "count": reg_map[m]} for m in month_labels]
 
     return {
         "kpis": {

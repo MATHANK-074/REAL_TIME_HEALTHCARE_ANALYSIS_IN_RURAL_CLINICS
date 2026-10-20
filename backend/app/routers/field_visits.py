@@ -44,9 +44,19 @@ def start_field_visit(
     # Authorize location
     enforce_patient_area_access(current_user, patient, db)
 
+    # Idempotent deduplication for field visits
+    if getattr(visit_data, "idempotency_key", None):
+        existing_visit = db.field_visits.find_one({"idempotency_key": visit_data.idempotency_key})
+        if existing_visit:
+            return serialize_doc(existing_visit)
+
     # Set properties
     db_visit = visit_data.dict(exclude_unset=True)
+    now_utc = datetime.datetime.utcnow()
     db_visit["nurse_id"] = str(current_user.get("_id") or current_user.get("id"))
+    if getattr(visit_data, "idempotency_key", None):
+        db_visit["idempotency_key"] = visit_data.idempotency_key
+        db_visit["synced_at"] = now_utc
     db_visit["status"] = db_visit.get("status") or 'STARTED'
     db_visit["created_at"] = datetime.datetime.utcnow()
     if not db_visit.get("started_at"):
@@ -168,6 +178,12 @@ def get_patient_field_visits(
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
+
+    # Idempotent deduplication for field visits
+    if getattr(visit_data, "idempotency_key", None):
+        existing_visit = db.field_visits.find_one({"idempotency_key": visit_data.idempotency_key})
+        if existing_visit:
+            return serialize_doc(existing_visit)
             
     visits = list(db.field_visits.find({"patient_id": patient_id}).sort("created_at", -1))
     return [serialize_doc(v) for v in visits]

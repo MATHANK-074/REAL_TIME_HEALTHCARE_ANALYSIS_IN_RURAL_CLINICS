@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, ShieldAlert, Check } from 'lucide-react';
 import { api } from '../services/api';
+import SyncStatusBadge from './SyncStatusBadge';
 
 const Header = ({ title, user }) => {
   const [notifications, setNotifications] = useState([]);
@@ -37,7 +38,10 @@ const Header = ({ title, user }) => {
     <header className="header-bar">
       <h1 className="header-title">{title}</h1>
       
-      <div className="header-actions">
+      <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Offline Sync Status Indicator */}
+        <SyncStatusBadge />
+
         {/* Notifications Notification System */}
         <div style={{ position: 'relative' }}>
           <button 

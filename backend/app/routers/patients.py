@@ -280,6 +280,12 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A village must be specified for the patient"
         )
+
+    # Idempotent deduplication check for offline sync retries
+    if getattr(patient_data, "idempotency_key", None):
+        existing_patient = db.patients.find_one({"idempotency_key": patient_data.idempotency_key})
+        if existing_patient:
+            return serialize_doc(enrich_patient(existing_patient, db))
         
     # Generate Patient ID
     last_patient = db.patients.find_one({}, sort=[("_id", -1)])
@@ -303,6 +309,12 @@ def create_patient(patient_data: PatientCreate, db: Database = Depends(get_db), 
     db_patient = patient_data.dict()
     db_patient["patient_code"] = patient_code
     db_patient["village_id"] = str(target_village_id)
+    now_utc = datetime.datetime.utcnow()
+    db_patient["created_at"] = getattr(patient_data, "created_at", None) or now_utc
+    db_patient["updated_at"] = now_utc
+    if getattr(patient_data, "idempotency_key", None):
+        db_patient["idempotency_key"] = patient_data.idempotency_key
+        db_patient["synced_at"] = now_utc
     
     # Auto-link clinic_id if missing
     if not db_patient.get("clinic_id"):

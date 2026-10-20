@@ -40,6 +40,12 @@ def create_health_record(
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
+
+    # Idempotent deduplication check for offline health record sync retries
+    if getattr(record_data, "idempotency_key", None):
+        existing_record = db.health_records.find_one({"idempotency_key": record_data.idempotency_key})
+        if existing_record:
+            return serialize_doc(existing_record)
     
     bmi = record_data.bmi
     if record_data.weight and record_data.height:
@@ -74,8 +80,13 @@ def create_health_record(
     elif db_record.get("blood_sugar_random"):
         db_record["blood_glucose"] = int(float(db_record["blood_sugar_random"]))
 
+    now_utc = datetime.datetime.utcnow()
     db_record["recorded_by"] = str(current_user.id) if hasattr(current_user, 'id') else str(current_user.get("id", "sys"))
-    db_record["recorded_at"] = datetime.datetime.utcnow()
+    db_record["recorded_at"] = getattr(record_data, "recorded_at", None) or now_utc
+    db_record["created_at"] = now_utc
+    if getattr(record_data, "idempotency_key", None):
+        db_record["idempotency_key"] = record_data.idempotency_key
+        db_record["synced_at"] = now_utc
     db_record["review_status"] = "PENDING_REVIEW"
     db_record["reviewed_by"] = None
     db_record["reviewed_at"] = None
@@ -121,7 +132,7 @@ def get_patient_health_records(
         raise HTTPException(status_code=404, detail="Patient not found")
         
     enforce_patient_area_access(current_user, patient, db)
-    
+
     p_id_query = [str(patient_id)]
     if ObjectId.is_valid(str(patient_id)):
         p_id_query.append(ObjectId(str(patient_id)))
@@ -202,7 +213,7 @@ def review_health_record(
     patient = db.patients.find_one({"_id": ObjectId(record["patient_id"])})
     if patient:
         enforce_patient_area_access(current_user, patient, db)
-        
+
     update_fields = {
         "review_status": review_data.review_status.upper(),
         "doctor_notes": review_data.doctor_notes,

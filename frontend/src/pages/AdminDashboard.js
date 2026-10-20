@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { 
   Building2, 
@@ -34,7 +34,7 @@ const AdminDashboard = () => {
   const [followupEndDate, setFollowupEndDate] = useState('');
   const [selectedFollowupDetail, setSelectedFollowupDetail] = useState(null);
 
-  const loadFollowups = async () => {
+  const loadFollowups = useCallback(async () => {
     try {
       setFollowupsLoading(true);
       const res = await api.getFollowups();
@@ -44,9 +44,9 @@ const AdminDashboard = () => {
     } finally {
       setFollowupsLoading(false);
     }
-  };
+  }, []);
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -61,11 +61,11 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadFollowups]);
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [loadDashboard]);
 
   if (loading) {
     return (
@@ -96,17 +96,20 @@ const AdminDashboard = () => {
   const { kpis, disease_distribution, high_risk_by_disease, subdistrict_comparison, village_wise_risk = [], monthly_trend } = data;
 
   const OFFICIAL_TALUKS = [
-    'Anthiyur',
-    'Bhavani',
     'Erode',
-    'Gobichettipalayam',
-    'Kodumudi',
-    'Modakkurichi',
-    'Nambiyur',
     'Perundurai',
+    'Modakkurichi',
+    'Kodumudi',
+    'Gobichettipalayam',
     'Sathyamangalam',
-    'Thalavadi'
+    'Bhavani',
+    'Anthiyur',
+    'Thalavadi',
+    'Nambiyur'
   ];
+
+  const officialVillageCount = (village_wise_risk || []).filter(v => v.is_official !== false && !v.is_legacy).length;
+  const legacyVillageCount = (village_wise_risk || []).filter(v => v.is_legacy === true).length;
 
   const filteredVillages = (village_wise_risk || []).filter(vwr => {
     const matchesSearch = villageSearch.trim() === '' || 
@@ -290,11 +293,20 @@ const AdminDashboard = () => {
       <div className="dashboard-row">
         <div className="glass chart-card">
           <h3 className="chart-title">Subdistrict Patient & High Risk Comparison</h3>
-          <div style={{ height: '300px', width: '100%' }}>
+          <div style={{ height: '320px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={subdistrict_comparison}>
-                <XAxis dataKey="name" stroke="var(--text-secondary)" tickLine={false} />
-                <YAxis stroke="var(--text-secondary)" tickLine={false} />
+              <BarChart data={subdistrict_comparison} margin={{ top: 10, right: 10, left: -10, bottom: 40 }}>
+                <XAxis 
+                  dataKey="name" 
+                  stroke="var(--text-secondary)" 
+                  tickLine={false} 
+                  interval={0} 
+                  angle={-35} 
+                  textAnchor="end" 
+                  height={60} 
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis stroke="var(--text-secondary)" tickLine={false} allowDecimals={false} />
                 <Tooltip 
                   contentStyle={{ 
                     background: '#ffffff', 
@@ -312,11 +324,20 @@ const AdminDashboard = () => {
 
         <div className="glass chart-card">
           <h3 className="chart-title">Monthly Registration Trends</h3>
-          <div style={{ height: '300px', width: '100%' }}>
+          <div style={{ height: '320px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthly_trend}>
-                <XAxis dataKey="month" stroke="var(--text-secondary)" tickLine={false} />
-                <YAxis stroke="var(--text-secondary)" tickLine={false} />
+              <LineChart data={monthly_trend} margin={{ top: 10, right: 20, left: -10, bottom: 40 }}>
+                <XAxis 
+                  dataKey="month" 
+                  stroke="var(--text-secondary)" 
+                  tickLine={false} 
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={60}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis stroke="var(--text-secondary)" tickLine={false} allowDecimals={false} />
                 <Tooltip 
                   contentStyle={{ 
                     background: '#ffffff', 
@@ -325,7 +346,15 @@ const AdminDashboard = () => {
                     color: 'var(--text-primary)'
                   }} 
                 />
-                <Line type="monotone" dataKey="count" name="New Registrations" stroke="var(--secondary)" strokeWidth={3} dot={{ fill: 'var(--secondary)' }} />
+                <Line 
+                  type="monotone" 
+                  dataKey="count" 
+                  name="New Registrations" 
+                  stroke="var(--secondary)" 
+                  strokeWidth={3} 
+                  dot={{ fill: 'var(--secondary)', r: 4 }} 
+                  activeDot={{ r: 6 }} 
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -338,7 +367,7 @@ const AdminDashboard = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
             <h3 className="chart-title" style={{ margin: 0 }}>Village Wise Risk Distribution</h3>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              Showing {filteredVillages.length} of {village_wise_risk.length} villages
+              Showing {filteredVillages.length} of {village_wise_risk.length} villages ({officialVillageCount} official, {legacyVillageCount} legacy)
             </span>
           </div>
 
@@ -404,7 +433,24 @@ const AdminDashboard = () => {
                 ) : (
                   filteredVillages.map(vwr => (
                     <tr key={vwr.id}>
-                      <td><strong>{vwr.name}</strong></td>
+                      <td>
+                        <strong>{vwr.name}</strong>
+                        {vwr.is_legacy && (
+                          <span 
+                            style={{ 
+                              marginLeft: '8px', 
+                              padding: '2px 6px', 
+                              fontSize: '0.7rem', 
+                              borderRadius: '4px', 
+                              background: '#fef3c7', 
+                              color: '#92400e', 
+                              fontWeight: 600 
+                            }}
+                          >
+                            Legacy
+                          </span>
+                        )}
+                      </td>
                       <td>{vwr.parent_name}</td>
                       <td style={{ textAlign: 'center' }}>{vwr.patients}</td>
                       <td style={{ textAlign: 'center' }}>

@@ -140,6 +140,8 @@ class PatientBase(BaseModel):
     emergency_contact: Optional[str] = None
     existing_disease: Optional[str] = None
     allergies: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 class PatientCreate(PatientBase):
     pass
@@ -183,6 +185,8 @@ class HealthRecordBase(BaseModel):
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     doctor_notes: Optional[str] = None
+    recorded_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = None
 
 class HealthRecordReviewUpdate(BaseModel):
     review_status: str
@@ -278,6 +282,7 @@ class Followup(FollowupBase, MongoBaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = None
     patient: Optional[Patient] = None
 
 
@@ -345,6 +350,7 @@ class FieldVisitBase(BaseModel):
     status: Optional[str] = 'STARTED'
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    idempotency_key: Optional[str] = None
 
 class FieldVisitCreate(FieldVisitBase):
     pass

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { queueOfflineFieldVisit } from '../services/offlineSyncManager';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -74,26 +75,52 @@ const FieldVisitModal = ({ patient, user, onClose, onComplete }) => {
   const handleCompleteVisit = async () => {
     setApiError('');
     setIsSubmitting(true);
+    const visitPayload = {
+      patient_id: patient.id || patient._id,
+      latitude: location?.lat || null,
+      longitude: location?.lng || null,
+      accuracy: location?.accuracy || null,
+      notes: visitNotes,
+      status: 'COMPLETED'
+    };
+
+    const isOffline = !navigator.onLine || String(patient.id || patient._id).startsWith('temp_pat_');
+
+    if (isOffline) {
+      try {
+        await queueOfflineFieldVisit({ ...visitPayload, visitId });
+        onComplete();
+      } catch (err) {
+        setApiError('Failed to save offline visit: ' + (err.message || err));
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     try {
       if (!visitId) {
         // Start and complete at same time if they didn't hit start
-        await api.startFieldVisit({
-          patient_id: patient.id,
-          latitude: location?.lat || null,
-          longitude: location?.lng || null,
-          accuracy: location?.accuracy || null,
-          notes: visitNotes,
-          status: 'COMPLETED'
-        });
+        await api.startFieldVisit(visitPayload);
       } else {
         await api.updateFieldVisit(visitId, {
-          patient_id: patient.id,
+          patient_id: patient.id || patient._id,
           notes: visitNotes,
           status: 'COMPLETED'
         });
       }
       onComplete();
     } catch (err) {
+      if (!navigator.onLine || err.message?.includes('Failed to fetch') || err.message?.includes('network')) {
+        try {
+          await queueOfflineFieldVisit({ ...visitPayload, visitId });
+          onComplete();
+          return;
+        } catch (qErr) {
+          setApiError(qErr.message || 'Failed to queue offline visit.');
+          return;
+        }
+      }
       setApiError(err.message || 'Failed to complete visit.');
     } finally {
       setIsSubmitting(false);

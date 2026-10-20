@@ -2,6 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { 
+  queueOfflinePatient, 
+  queueOfflineVitals, 
+  queueOfflineFollowupUpdate
+} from '../services/offlineSyncManager';
+import * as offlineStorage from '../services/offlineStorage';
+import { 
   Search, 
   UserPlus, 
   Heart, 
@@ -18,9 +24,11 @@ import {
   Eye,
   X,
   RefreshCw,
-  Bell
+  Bell,
+  WifiOff
 } from 'lucide-react';
 import FieldVisitModal from '../components/FieldVisitModal';
+import SyncStatusBadge from '../components/SyncStatusBadge';
 
 // Helper for vital ranges
 const getVitalStatus = (name, value) => {
@@ -158,18 +166,84 @@ const NurseDashboard = ({ user }) => {
   const [savingVitals, setSavingVitals] = useState(false);
   const [vitalsError, setVitalsError] = useState('');
 
-  // Load patients list
-  const loadPatients = useCallback(async () => {
+  const [profile, setProfile] = useState(user || null);
+  const [pendingPatientIds, setPendingPatientIds] = useState(new Set());
+
+  // Helper to extract active user id
+  const getUid = useCallback(() => {
+    return user?.id || user?._id || profile?.id || profile?._id || null;
+  }, [user, profile]);
+
+  const updatePendingPatientIds = useCallback(async () => {
+    const uid = getUid();
+    if (!uid) return;
     try {
-      const data = await api.getPatients(searchQuery);
+      const queue = await offlineStorage.getQueue(uid);
+      const pids = new Set();
+      (queue || []).forEach(action => {
+        if (action.tempId) pids.add(String(action.tempId));
+        if (action.payload && action.payload.patient_id) pids.add(String(action.payload.patient_id));
+      });
+      setPendingPatientIds(pids);
+    } catch (e) {
+      console.warn('Error reading queue for pending patient IDs:', e);
+    }
+  }, [getUid]);
+
+  // Load patients list with offline caching and offline patient inclusion
+  const loadPatients = useCallback(async () => {
+    const uid = getUid();
+    try {
+      let data = [];
+      try {
+        data = await api.getPatients(searchQuery);
+        if (uid && Array.isArray(data)) {
+          await offlineStorage.setCachedPatients(uid, data);
+        }
+      } catch (netErr) {
+        // Fallback to local IndexedDB cache when network is unavailable
+        if (uid) {
+          const cached = await offlineStorage.getCachedPatients(uid);
+          if (cached && cached.length > 0) {
+            data = cached;
+            if (searchQuery.trim()) {
+              const q = searchQuery.toLowerCase();
+              data = data.filter(p => 
+                (p.name || '').toLowerCase().includes(q) ||
+                (p.patient_code || '').toLowerCase().includes(q) ||
+                (p.phone || '').includes(q)
+              );
+            }
+          } else {
+            throw netErr;
+          }
+        } else {
+          throw netErr;
+        }
+      }
+
+      // Merge any pending offline-registered patients from IndexedDB
+      if (uid) {
+        try {
+          const localCached = await offlineStorage.getCachedPatients(uid);
+          const pendingOffline = localCached.filter(p => p._isOffline || String(p.id).startsWith('temp_pat_'));
+          
+          // Deduplicate by ID
+          const existingIds = new Set(data.map(p => String(p.id || p._id)));
+          const toAdd = pendingOffline.filter(p => !existingIds.has(String(p.id || p._id)));
+          data = [...toAdd, ...data];
+        } catch (mergeErr) {
+          console.warn('Could not merge offline-pending patients:', mergeErr);
+        }
+      }
+
       setPatients(data);
+      await updatePendingPatientIds();
     } catch (e) {
       setError('Failed to fetch patients: ' + (e.message || e));
       console.error('Failed to fetch patients', e);
     }
-  }, [searchQuery]);
-
-  const [profile, setProfile] = useState(user || null);
+  }, [searchQuery, getUid, updatePendingPatientIds]);
 
   const loadUserProfile = useCallback(async () => {
     try {
@@ -186,13 +260,27 @@ const NurseDashboard = ({ user }) => {
   }, []);
 
   const loadVillages = useCallback(async () => {
+    const uid = getUid();
     try {
       const data = await api.getVillages();
       setVillages(data);
+      if (uid && Array.isArray(data)) {
+        await offlineStorage.setCachedVillages(uid, data);
+      }
     } catch (e) {
-      console.error('Failed to fetch villages', e);
+      console.warn('Failed to fetch villages from network, checking cache...', e);
+      if (uid) {
+        try {
+          const cached = await offlineStorage.getCachedVillages(uid);
+          if (cached && cached.length > 0) {
+            setVillages(cached);
+          }
+        } catch (cErr) {
+          console.error('Failed reading cached villages:', cErr);
+        }
+      }
     }
-  }, []);
+  }, [getUid]);
 
   const loadFieldVisits = useCallback(async () => {
     try {
@@ -204,16 +292,30 @@ const NurseDashboard = ({ user }) => {
   }, []);
 
   const loadFollowups = useCallback(async () => {
+    const uid = getUid();
     try {
       setFollowupsLoading(true);
       const data = await api.getFollowups();
       setFollowups(Array.isArray(data) ? data : []);
+      if (uid && Array.isArray(data)) {
+        await offlineStorage.setCachedFollowups(uid, data);
+      }
     } catch (e) {
-      console.error('Failed to fetch followups', e);
+      console.warn('Failed to fetch followups from network, checking cache...', e);
+      if (uid) {
+        try {
+          const cached = await offlineStorage.getCachedFollowups(uid);
+          if (cached && cached.length > 0) {
+            setFollowups(cached);
+          }
+        } catch (cErr) {
+          console.error('Failed reading cached followups:', cErr);
+        }
+      }
     } finally {
       setFollowupsLoading(false);
     }
-  }, []);
+  }, [getUid]);
 
   const loadVitalsReminders = useCallback(async () => {
     try {
@@ -428,20 +530,51 @@ const NurseDashboard = ({ user }) => {
 
     const activeVillage = regVillageId || profile?.village_id || user?.village_id;
 
+    const patientPayload = {
+      name: regName.trim(),
+      age: parseInt(regAge),
+      gender: regGender,
+      phone: regPhone ? regPhone.trim() : null,
+      address: regAddress ? regAddress.trim() : null,
+      blood_group: regBlood || null,
+      emergency_contact: regEmergency ? regEmergency.trim() : null,
+      existing_disease: regDisease || null,
+      allergies: regAllergies || null,
+      village_id: activeVillage || null
+    };
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline) {
+      try {
+        const offlinePat = await queueOfflinePatient(patientPayload);
+        setRegisteredPatient({
+          ...offlinePat,
+          email: `${offlinePat.patient_code.toLowerCase()}@ruralcare.com`,
+          password: regPhone || 'password123',
+          _isOffline: true
+        });
+        setSuccess('Patient saved on this device. Synchronization will occur when the server becomes available.');
+        setShowRegModal(false);
+        loadPatients();
+
+        // Clear forms
+        setRegName('');
+        setRegAge('');
+        setRegPhone('');
+        setRegAddress('');
+        setRegEmergency('');
+      } catch (err) {
+        setError(err.message || 'Failed to save patient locally.');
+      } finally {
+        setIsRegistering(false);
+      }
+      return;
+    }
+
     try {
       // Village is strictly fixed to the nurse's assigned village
-      const newPatient = await api.createPatient({
-        name: regName,
-        age: parseInt(regAge),
-        gender: regGender,
-        phone: regPhone || null,
-        address: regAddress || null,
-        blood_group: regBlood || null,
-        emergency_contact: regEmergency || null,
-        existing_disease: regDisease || null,
-        allergies: regAllergies || null,
-        village_id: activeVillage || null
-      });
+      const newPatient = await api.createPatient(patientPayload);
       
       const pEmail = `${newPatient.patient_code.toLowerCase()}@ruralcare.com`;
       const pPass = regPhone || 'password123';
@@ -449,7 +582,8 @@ const NurseDashboard = ({ user }) => {
       setRegisteredPatient({
         ...newPatient,
         email: pEmail,
-        password: pPass
+        password: pPass,
+        _isOffline: false
       });
       setShowRegModal(false);
       loadPatients();
@@ -462,6 +596,31 @@ const NurseDashboard = ({ user }) => {
       setRegEmergency('');
       setRegVillageId(activeVillage || profile?.village_id || user?.village_id || '');
     } catch (err) {
+      // If network failure, queue offline gracefully
+      const isNetError = !navigator.onLine || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('network');
+      if (isNetError) {
+        try {
+          const offlinePat = await queueOfflinePatient(patientPayload);
+          setRegisteredPatient({
+            ...offlinePat,
+            email: `${offlinePat.patient_code.toLowerCase()}@ruralcare.com`,
+            password: regPhone || 'password123',
+            _isOffline: true
+          });
+          setSuccess('Patient saved on this device. Synchronization will occur when the server becomes available.');
+          setShowRegModal(false);
+          loadPatients();
+          setRegName('');
+          setRegAge('');
+          setRegPhone('');
+          setRegAddress('');
+          setRegEmergency('');
+          return;
+        } catch (queueErr) {
+          setError(queueErr.message || 'Failed to queue patient offline.');
+          return;
+        }
+      }
       setError(err.message || 'Failed to register patient.');
     } finally {
       setIsRegistering(false);
@@ -502,8 +661,7 @@ const NurseDashboard = ({ user }) => {
 
       const pregVal = parseNum(vPregnancies);
 
-      // Log health record
-      await api.logVitals({
+      const vitalsPayload = {
         patient_id: String(patientId),
         weight: parseNum(vWeight, true),
         height: parseNum(vHeight, true),
@@ -518,14 +676,42 @@ const NurseDashboard = ({ user }) => {
         smoking_status: vSmoking || 'NEVER',
         symptoms: vSymptoms ? vSymptoms.trim() : null,
         clinical_notes: vNotes ? vNotes.trim() : null
-      });
-      
-      setSuccess('Health record vitals logged successfully!');
-      setShowVitalsModal(false);
-      resetVitals();
-      loadPatients();
-      loadVitalsReminders();
-      loadFollowups();
+      };
+
+      const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) || String(patientId).startsWith('temp_pat_');
+
+      if (isOffline) {
+        await queueOfflineVitals(vitalsPayload);
+        setSuccess('Health record vitals saved on this device. Risk assessment pending server connection.');
+        setShowVitalsModal(false);
+        resetVitals();
+        await updatePendingPatientIds();
+        loadPatients();
+        return;
+      }
+
+      // Online attempt
+      try {
+        await api.logVitals(vitalsPayload);
+        setSuccess('Health record vitals logged successfully!');
+        setShowVitalsModal(false);
+        resetVitals();
+        loadPatients();
+        loadVitalsReminders();
+        loadFollowups();
+      } catch (netErr) {
+        const isNetFail = !navigator.onLine || netErr.message?.includes('Failed to fetch') || netErr.message?.includes('NetworkError') || netErr.message?.includes('network');
+        if (isNetFail) {
+          await queueOfflineVitals(vitalsPayload);
+          setSuccess('Health record vitals saved on this device. Risk assessment pending server connection.');
+          setShowVitalsModal(false);
+          resetVitals();
+          await updatePendingPatientIds();
+          loadPatients();
+        } else {
+          throw netErr;
+        }
+      }
     } catch (err) {
       const msg = err.message || 'Failed to log health vitals.';
       setVitalsError(msg);
@@ -535,12 +721,30 @@ const NurseDashboard = ({ user }) => {
     }
   };
 
-
   const handleCompleteFollowup = async (id) => {
     try {
-      await api.updateFollowupStatus(id, 'COMPLETED');
-      setSuccess('Follow-up marked as completed!');
-      loadFollowups();
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOfflineFollowupUpdate(id, 'COMPLETED');
+        setFollowups(prev => prev.map(f => String(f.id || f._id) === String(id) ? { ...f, status: 'COMPLETED', _syncStatus: 'PENDING_SYNC' } : f));
+        setSuccess('Follow-up marked completed locally. Will synchronize when online.');
+        return;
+      }
+
+      try {
+        await api.updateFollowupStatus(id, 'COMPLETED');
+        setSuccess('Follow-up marked as completed!');
+        loadFollowups();
+      } catch (netErr) {
+        const isNetFail = !navigator.onLine || netErr.message?.includes('Failed to fetch') || netErr.message?.includes('network');
+        if (isNetFail) {
+          await queueOfflineFollowupUpdate(id, 'COMPLETED');
+          setFollowups(prev => prev.map(f => String(f.id || f._id) === String(id) ? { ...f, status: 'COMPLETED', _syncStatus: 'PENDING_SYNC' } : f));
+          setSuccess('Follow-up marked completed locally. Will synchronize when online.');
+        } else {
+          throw netErr;
+        }
+      }
     } catch (e) {
       setError(e.message || 'Failed to complete follow-up');
     }
@@ -548,7 +752,7 @@ const NurseDashboard = ({ user }) => {
 
   return (
     <div className="main-content">
-      <div className="header-bar">
+      <div className="header-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="header-title">Nurse Vitals Dashboard</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
@@ -556,15 +760,39 @@ const NurseDashboard = ({ user }) => {
           </p>
         </div>
         
-        <button className="btn btn-primary" onClick={() => {
-          setError('');
-          setSuccess('');
-          setShowRegModal(true);
-        }}>
-          <UserPlus size={18} />
-          <span>Register Patient</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <SyncStatusBadge />
+          <button className="btn btn-primary" onClick={() => {
+            setError('');
+            setSuccess('');
+            setShowRegModal(true);
+          }}>
+            <UserPlus size={18} />
+            <span>Register Patient</span>
+          </button>
+        </div>
       </div>
+
+      {typeof navigator !== 'undefined' && !navigator.onLine && (
+        <div style={{
+          background: '#fffbeb',
+          border: '1.5px solid #f59e0b',
+          borderRadius: '12px',
+          padding: '12px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          color: '#92400e',
+          fontSize: '0.9rem',
+          boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)'
+        }}>
+          <WifiOff size={22} style={{ flexShrink: 0, color: '#d97706' }} />
+          <div style={{ flex: 1 }}>
+            <strong>Offline Mode Active:</strong> You are currently working without internet connection. You can register patients and log vitals normally. All actions are safely stored on this device and will automatically sync when network is restored.
+          </div>
+        </div>
+      )}
 
       {success && (
         <div style={{
@@ -1205,6 +1433,9 @@ const NurseDashboard = ({ user }) => {
               </tr>
             ) : (
               patients.map((p) => {
+                const pidStr = String(p.id || p._id || '');
+                const isOfflinePat = p._isOffline || pidStr.startsWith('temp_pat_') || p._syncStatus === 'PENDING_SYNC';
+                const hasPendingQueue = isOfflinePat || pendingPatientIds.has(pidStr) || (p.tempId && pendingPatientIds.has(String(p.tempId)));
                 const latestPred = p.predictions && p.predictions.length > 0 ? p.predictions[0] : null;
                 const riskClass = latestPred 
                   ? latestPred.risk_level === 'HIGH' ? 'badge-danger' 
@@ -1213,15 +1444,34 @@ const NurseDashboard = ({ user }) => {
                   : 'badge-info';
                 
                 return (
-                  <tr key={p.id}>
+                  <tr key={p.id || p._id || p.tempId}>
                     <td>
-                      <span 
-                        style={{ color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                        onClick={() => navigate(`/patients/${p.id || p._id}`)}
-                        title="Click to view full health history & trends"
-                      >
-                        {p.patient_code}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span 
+                          style={{ color: 'var(--primary)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                          onClick={() => navigate(`/patients/${p.id || p._id}`)}
+                          title="Click to view full health history & trends"
+                        >
+                          {p.patient_code}
+                        </span>
+                        {hasPendingQueue && (
+                          <span 
+                            style={{ 
+                              fontSize: '0.65rem', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              background: 'rgba(245, 158, 11, 0.2)', 
+                              color: '#f59e0b',
+                              border: '1px solid rgba(245, 158, 11, 0.4)',
+                              fontWeight: 700,
+                              whiteSpace: 'nowrap'
+                            }}
+                            title="Clinical action saved locally, waiting for server sync"
+                          >
+                            OFFLINE — PENDING SYNC
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <div 
@@ -1237,9 +1487,19 @@ const NurseDashboard = ({ user }) => {
                     <td>{p.phone || 'N/A'}</td>
                     <td>{typeof p.village === 'object' ? (p.village?.name || 'N/A') : (p.village || p.village_name || 'N/A')}</td>
                     <td>
-                      <span className={`badge ${riskClass}`}>
-                        {latestPred ? `${latestPred.risk_level} (${Math.round(latestPred.probability * 100)}%)` : 'NO DATA'}
-                      </span>
+                      {hasPendingQueue ? (
+                        <span className="badge badge-warning" style={{ fontSize: '0.75rem' }}>
+                          OFFLINE — PENDING SYNC
+                        </span>
+                      ) : latestPred ? (
+                        <span className={`badge ${riskClass}`}>
+                          {`${latestPred.risk_level} (${Math.round(latestPred.probability * 100)}%)`}
+                        </span>
+                      ) : (
+                        <span className="badge badge-info">
+                          NO DATA
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
@@ -1414,18 +1674,36 @@ const NurseDashboard = ({ user }) => {
           }}>
             <div style={{
               width: '64px', height: '64px', borderRadius: '50%',
-              background: '#dcfce7', color: '#16a34a', display: 'flex',
+              background: registeredPatient._isOffline ? '#fef3c7' : '#dcfce7', 
+              color: registeredPatient._isOffline ? '#d97706' : '#16a34a', 
+              display: 'flex',
               alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
             }}>
-              <CheckCircle size={36} />
+              {registeredPatient._isOffline ? <WifiOff size={32} /> : <CheckCircle size={36} />}
             </div>
 
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}>
-              Patient Profile Created!
+              {registeredPatient._isOffline ? 'Patient Saved Locally (Offline)' : 'Patient Profile Created!'}
             </h2>
-            <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '24px' }}>
-              <strong style={{ color: 'var(--primary)' }}>{registeredPatient.name}</strong> has been registered with ID <strong style={{ color: '#0ea5e9' }}>{registeredPatient.patient_code}</strong>.
+            <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: registeredPatient._isOffline ? '12px' : '24px' }}>
+              <strong style={{ color: 'var(--primary)' }}>{registeredPatient.name}</strong> has been {registeredPatient._isOffline ? 'queued offline with temporary ID' : 'registered with ID'} <strong style={{ color: '#0ea5e9' }}>{registeredPatient.patient_code}</strong>.
             </p>
+
+            {registeredPatient._isOffline && (
+              <div style={{
+                background: '#fffbeb',
+                border: '1.5px solid #f59e0b',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                color: '#92400e',
+                fontSize: '0.88rem',
+                textAlign: 'left',
+                marginBottom: '20px',
+                lineHeight: 1.4
+              }}>
+                <strong>Offline Notice:</strong> Patient saved on this device. Synchronization will occur when the server becomes available.
+              </div>
+            )}
 
             {/* Credentials Card */}
             <div style={{
@@ -1493,6 +1771,25 @@ const NurseDashboard = ({ user }) => {
               
               {/* Form Side */}
               <div>
+                {typeof navigator !== 'undefined' && !navigator.onLine && (
+                  <div style={{
+                    background: '#fffbeb',
+                    border: '1.5px solid #f59e0b',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    color: '#92400e',
+                    fontSize: '0.88rem',
+                    marginBottom: '15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <WifiOff size={18} style={{ color: '#d97706', flexShrink: 0 }} />
+                    <div>
+                      <strong>Offline Mode:</strong> When saved, this vital check-in will be stored on this device as <strong>OFFLINE — PENDING SYNC</strong> and automatically sent to the server once online.
+                    </div>
+                  </div>
+                )}
                 {vitalsError && (
                   <div className="alert alert-danger" style={{ marginBottom: '15px', padding: '10px 15px', borderRadius: '8px', fontSize: '0.9rem' }}>
                     {vitalsError}
@@ -1554,7 +1851,11 @@ const NurseDashboard = ({ user }) => {
                     disabled={savingVitals}
                     style={{ width: '100%', padding: '12px', marginTop: '15px', fontWeight: 600 }}
                   >
-                    {savingVitals ? 'Saving Health Record...' : 'Save Health Record'}
+                    {savingVitals 
+                      ? 'Saving Health Record...' 
+                      : (typeof navigator !== 'undefined' && !navigator.onLine 
+                          ? 'Save Health Record (Save Offline)' 
+                          : 'Save Health Record')}
                   </button>
                 </form>
               </div>
